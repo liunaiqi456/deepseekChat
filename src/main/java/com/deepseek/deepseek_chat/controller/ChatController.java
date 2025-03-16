@@ -1,12 +1,13 @@
 package com.deepseek.deepseek_chat.controller;
+import org.springframework.web.servlet.mvc.method.annotation.ResponseBodyEmitter;
 
 import com.deepseek.deepseek_chat.service.DeepSeekService;
+import com.deepseek.deepseek_chat.util.ResponseFormatterUtil;
 
-import java.nio.charset.StandardCharsets;
 
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.MediaType;
+
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -27,19 +28,35 @@ public class ChatController {
 
 	@GetMapping("/ask")
 	public ResponseEntity<String> askQuestion(@RequestParam String question) {
-		 // 调用 Service 获取 AI 回答
-        String answer = deepSeekService.askDeepSeek(question);
+		 String answer = deepSeekService.askDeepSeek(question);
 
-        // 让句号后面换行，增强可读性
-        String formattedAnswer = answer.replace(". ", ".\n\n");
+		    // 使用工具类格式化答案
+		    String formattedAnswer = ResponseFormatterUtil.formatAnswer(answer);
 
-        // 设置响应头，确保是 UTF-8 避免乱码
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(new MediaType("text", "plain", StandardCharsets.UTF_8));
+		    // 使用工具类获取 UTF-8 头部
+		    HttpHeaders headers = ResponseFormatterUtil.createUtf8Headers();
 
-        return new ResponseEntity<>(formattedAnswer, headers, HttpStatus.OK);
+		    return new ResponseEntity<>(formattedAnswer, headers, HttpStatus.OK);
 	}
 	
+
+	@GetMapping("/asks")
+	public ResponseEntity<ResponseBodyEmitter> askQuestionStream(@RequestParam String question) {
+		ResponseBodyEmitter emitter = new ResponseBodyEmitter();
+		
+		// 设置响应头
+		HttpHeaders headers = ResponseFormatterUtil.createUtf8Headers();
+		
+		// 获取 AI 响应
+		String answer = deepSeekService.askDeepSeek(question);
+		
+		// 使用工具类处理流式响应
+		ResponseFormatterUtil.sendFormattedStream(emitter, answer);
+		
+		return ResponseEntity.ok()
+				.headers(headers)
+				.body(emitter);
+	}
 
 	
 
