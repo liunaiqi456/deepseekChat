@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>WebSocket 聊天</title>
+    <!-- 引入 Bootstrap 和 jQuery -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <script src="https://code.jquery.com/jquery-3.6.4.min.js"></script>
+</head>
+<body>
+    <div class="container mt-3">
+        <h2 class="text-primary">WebSocket 聊天</h2>
+        <div class="border p-3 mb-3" style="height: 300px; overflow-y: auto;" id="chat-box"></div>
+        <input type="text" id="message" class="form-control" placeholder="输入消息...">
+        <button class="btn btn-success mt-2" id="send-btn">发送</button>
+    </div>
+
+    <script>
+        $(document).ready(function () {
+            // 创建 WebSocket 连接（后端 WebSocket 地址）
+            let socket = new WebSocket("ws://localhost:8080/chat");
+
+            // 接收消息
+            socket.onmessage = function (event) {
+                $("#chat-box").append("<p class='alert alert-secondary'>" + event.data + "</p>");
+            };
+
+            // 发送消息
+            $("#send-btn").click(function () {
+                let message = $("#message").val();
+                socket.send(message);
+                $("#chat-box").append("<p class='alert alert-primary'>我: " + message + "</p>");
+                $("#message").val("");
+            });
+
+            // 监听 WebSocket 关闭
+            socket.onclose = function () {
+                $("#chat-box").append("<p class='alert alert-danger'>连接已关闭</p>");
+            };
+        });
+    </script>
+</body>
+</html>
