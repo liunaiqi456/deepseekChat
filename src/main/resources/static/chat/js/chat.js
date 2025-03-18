@@ -329,7 +329,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 reconnectionDelay: 1000,              // 重连延迟
                 timeout: 20000,                       // 增加超时时间
                 forceNew: true,
-                path: '/static/socket.io'
+                path: '/socket.io'
             });
 
             // 添加连接事件监听
