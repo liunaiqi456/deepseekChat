@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="zh" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" href="data:,">
+    <title>DeepSeek 风格聊天界面</title>
+    <!-- 引入 Bootstrap CSS -->
+    <link rel="stylesheet" th:href="@{/chat/css/bootstrap.min.css}">
+    <!-- 引入自定义 CSS -->
+    <link rel="stylesheet" th:href="@{/chat/css/chat.css}">
+</head>
+<body>
+    <div class="container-fluid h-100">
+        <div class="row h-100">
+            <!-- 侧边栏 -->
+            <aside class="col-md-3 col-lg-2 bg-light sidebar">
+                <div class="d-flex flex-column align-items-center p-3">
+                    <!-- Logo -->
+                    <img th:src="@{/chat/logo.png}" alt="DeepSeek" class="mb-4" style="height: 40px;">
+                    <!-- 新对话按钮 -->
+                    <button class="btn btn-primary w-100 mb-3">
+                        <span>开启新对话</span>
+                    </button>
+                    <!-- 历史对话列表 -->
+                    <div class="w-100">
+                        <h6 class="text-muted mb-2">历史对话</h6>
+                        <ul class="list-unstyled">
+                            <li class="mb-2"><a href="#" class="text-decoration-none">对话 1</a></li>
+                            <li class="mb-2"><a href="#" class="text-decoration-none">对话 2</a></li>
+                            <li class="mb-2"><a href="#" class="text-decoration-none">对话 3</a></li>
+                        </ul>
+                    </div>
+                </div>
+            </aside>
+    
+            <!-- 主聊天区域 -->
+            <main class="col-md-9 col-lg-10 d-flex flex-column">
+                <!-- 聊天消息区域 -->
+                <div class="flex-grow-1 p-4 overflow-auto" id="chat-messages">
+                    <!-- 示例消息 -->
+                    <div class="message mb-3">
+                        <div class="message-sender">用户</div>
+                        <div class="message-content bg-light p-3 rounded">你好，DeepSeek！</div>
+                    </div>
+                    <div class="message mb-3">
+                        <div class="message-sender">DeepSeek</div>
+                        <div class="message-content bg-primary text-white p-3 rounded">你好！有什么可以帮你的？</div>
+                    </div>
+                </div>
+    
+                <!-- 输入区域 -->
+                <div class="input-container p-3 bg-light">
+                    <div class="input-group">
+                        <textarea id="message-input" class="form-control message-input" placeholder="给 DeepSeek 发送消息"></textarea>
+                        <button id="send-button" class="btn btn-primary">发送</button>
+                    </div>
+                </div>
+            </main>
+        </div>
+    </div>
+    
+
+    <!-- 引入 jQuery -->
+    <script th:src="@{/vendor/jquery/jquery.min.js}"></script>
+    <!-- 引入 Bootstrap JS -->
+    <script th:src="@{/vendor/bootstrap/js/bootstrap.bundle.min.js}"></script>
+    <!-- 引入 Socket.IO -->
+    <script th:src="@{/static/socket.io/socket.io.js}"></script>
+    <!-- 引入自定义 JS -->
+    <script th:src="@{/chat/js/chat.js}"></script>
+</body>
+</html>
