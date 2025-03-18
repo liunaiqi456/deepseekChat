@@ -12,18 +12,27 @@ public class WebMvcConfig implements WebMvcConfigurer {
     
     @Override
     public void addResourceHandlers(@NonNull ResourceHandlerRegistry registry) {
-        registry.addResourceHandler("/static/socket.io/**")
+        // 静态资源映射
+        registry.addResourceHandler("/static/**")
+                .addResourceLocations("classpath:/static/")
+                .setCachePeriod(0);
+        
+        // Socket.IO 资源映射
+        registry.addResourceHandler("/socket.io/**")
                 .addResourceLocations("classpath:/static/socket.io/")
                 .setCachePeriod(0);
         
+        // 模板资源映射
         registry.addResourceHandler("/**")
                 .addResourceLocations("classpath:/templates/")
                 .setCachePeriod(0);
         
+        // Vendor 资源映射
         registry.addResourceHandler("/vendor/**")
                 .addResourceLocations("classpath:/static/vendor/")
                 .setCachePeriod(0);
         
+        // Chat 相关资源映射
         registry.addResourceHandler("/chat/**")
                 .addResourceLocations("classpath:/static/chat/")
                 .setCachePeriod(0);

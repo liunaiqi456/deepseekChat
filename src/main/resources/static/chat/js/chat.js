@@ -1,101 +1,276 @@
 document.addEventListener('DOMContentLoaded', () => {
+    // 使用事件委托处理所有点击事件
+    document.addEventListener('click', handleGlobalClick);
+    
     // 获取必要的DOM元素
-    const messageInput = document.getElementById('message-input');
-    const sendButton = document.getElementById('send-button');
-    const chatMessages = document.getElementById('chat-messages');
-    const newChatBtn = document.querySelector('.btn-primary');
+    const elements = {
+        messageInput: document.getElementById('message-input'),
+        sendButton: document.getElementById('send-button'),
+        chatMessages: document.getElementById('chat-messages'),
+        chatForm: document.getElementById('chat-form'),
+        sidebar: document.querySelector('.sidebar'),
+        sidebarToggle: document.querySelector('.sidebar-toggle'),
+        sidebarBackdrop: document.querySelector('.sidebar-backdrop'),
+        statusBar: document.querySelector('.status-bar')
+    };
 
-    // 创建状态栏
-    const statusBar = document.createElement('div');
-    statusBar.className = 'status-bar';
-    document.querySelector('main').insertBefore(statusBar, document.querySelector('main').firstChild);
+    // 初始化
+    initializeChat();
 
-    // 更新状态指示器
-    function updateStatusIndicator(message, type) {
-        statusBar.innerHTML = `
-            <div class="status-indicator status-${type}">
-                ${message}
-            </div>
+    // 全局点击事件处理
+    function handleGlobalClick(event) {
+        const target = event.target;
+
+        // 处理新对话按钮点击
+        if (target.closest('.btn-primary')) {
+            startNewChat();
+        }
+
+        // 处理历史对话点击
+        if (target.closest('.list-unstyled a')) {
+            loadHistoryChat(target.closest('a').dataset.chatId);
+        }
+
+        // 处理侧边栏切换
+        if (target.closest('.sidebar-toggle') || target.closest('.sidebar-backdrop')) {
+            toggleSidebar();
+        }
+    }
+
+    // 初始化聊天功能
+    function initializeChat() {
+        // 自动聚焦输入框
+        focusInput();
+
+        // 设置输入框事件监听
+        elements.messageInput.addEventListener('input', handleInput);
+        elements.messageInput.addEventListener('keydown', handleKeyPress);
+        
+        // 移除自动重新聚焦的行为
+        // elements.messageInput.addEventListener('blur', () => {
+        //     if (!window.matchMedia('(max-width: 768px)').matches) {
+        //         setTimeout(focusInput, 100);
+        //     }
+        // });
+
+        // 设置表单提交事件
+        elements.chatForm.addEventListener('submit', handleSubmit);
+
+        // 设置消息观察器
+        setupMessageObserver();
+
+        // 初始化 Socket.IO
+        initializeSocketIO();
+    }
+
+    // 聚焦输入框
+    function focusInput() {
+        // 只在页面加载和发送消息后聚焦
+        if (!elements.messageInput.disabled && !isUserSelecting()) {
+            elements.messageInput.focus();
+        }
+    }
+
+    // 检查用户是否正在选择文本
+    function isUserSelecting() {
+        const selection = window.getSelection();
+        return selection && selection.toString().length > 0;
+    }
+
+    // 处理输入框事件
+    function handleInput(event) {
+        const input = event.target;
+        
+        // 自动调整高度
+        input.style.height = 'auto';
+        input.style.height = input.scrollHeight + 'px';
+        
+        // 更新发送按钮状态
+        elements.sendButton.disabled = !input.value.trim();
+    }
+
+    // 处理键盘事件
+    function handleKeyPress(event) {
+        // Alt + Enter 换行
+        if (event.key === 'Enter' && event.altKey) {
+            event.preventDefault();
+            const start = event.target.selectionStart;
+            const end = event.target.selectionEnd;
+            const value = event.target.value;
+            event.target.value = value.substring(0, start) + '\n' + value.substring(end);
+            event.target.selectionStart = event.target.selectionEnd = start + 1;
+            return;
+        }
+        
+        // Enter 发送消息
+        if (event.key === 'Enter' && !event.altKey && !event.shiftKey) {
+            event.preventDefault();
+            handleSubmit(event);
+        }
+    }
+
+    // 处理表单提交
+    async function handleSubmit(event) {
+        event.preventDefault();
+        const message = elements.messageInput.value.trim();
+        if (!message || elements.sendButton.disabled) return;
+
+        try {
+            await sendMessage(message);
+        } catch (error) {
+            console.error('发送消息失败:', error);
+            showSystemMessage('发送消息失败: ' + error.message, 'danger');
+        }
+    }
+
+    // 发送消息
+    async function sendMessage(message) {
+        // 禁用输入
+        setInputState(false);
+        
+        // 显示用户消息
+        addMessage(message, true);
+        
+        try {
+            const response = await fetch(`http://localhost:8080/chat/asks?question=${encodeURIComponent(message)}`, {
+                method: 'GET',
+                headers: {
+                    'Accept': 'text/event-stream',
+                    'Cache-Control': 'no-cache',
+                    'Connection': 'keep-alive'
+                }
+            });
+
+            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+            
+            // 处理流式响应
+            await handleStreamResponse(response);
+            
+        } finally {
+            // 重置输入状态
+            setInputState(true);
+        }
+    }
+
+    // 设置输入状态
+    function setInputState(enabled) {
+        elements.messageInput.disabled = !enabled;
+        elements.sendButton.disabled = !enabled;
+        if (enabled) {
+            elements.messageInput.value = '';
+            elements.messageInput.style.height = 'auto';
+            // 只在发送消息后聚焦
+            focusInput();
+        }
+    }
+
+    // 处理流式响应
+    async function handleStreamResponse(response) {
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let messageDiv = null;
+        let responseText = '';
+
+        try {
+            while (true) {
+                const { value, done } = await reader.read();
+                if (done) break;
+
+                const chunk = decoder.decode(value, { stream: true });
+                responseText += chunk;
+
+                // 创建或更新消息
+                if (!messageDiv) {
+                    messageDiv = createMessageElement('DeepSeek', responseText);
+                    elements.chatMessages.appendChild(messageDiv);
+                } else {
+                    updateMessageContent(messageDiv, responseText);
+                }
+            }
+        } catch (error) {
+            console.error('读取响应流失败:', error);
+            if (messageDiv) {
+                updateMessageContent(messageDiv, '读取响应时发生错误，请重试。', true);
+            }
+        }
+    }
+
+    // 创建消息元素
+    function createMessageElement(sender, content, isUser = false) {
+        const div = document.createElement('div');
+        div.className = `message ${isUser ? 'user-message' : 'ai-message'}`;
+        div.innerHTML = `
+            <div class="message-sender">${sender}</div>
+            <div class="message-content">${content}</div>
         `;
+        return div;
     }
 
-    // 检查元素是否存在
-    if (!messageInput || !sendButton || !chatMessages || !newChatBtn) {
-        console.error('Required elements not found');
-        return;
+    // 添加消息到聊天区域
+    function addMessage(content, isUser = false) {
+        const messageDiv = createMessageElement(isUser ? '用户' : 'DeepSeek', content, isUser);
+        elements.chatMessages.appendChild(messageDiv);
+        scrollToBottom();
     }
 
-    // 检查 Socket.IO 是否加载
-    if (typeof io === 'undefined') {
-        console.error('Socket.IO not loaded');
-        updateStatusIndicator('Socket.IO 未能正确加载', 'danger');
-        return;
+    // 更新消息内容
+    function updateMessageContent(messageDiv, content, isError = false) {
+        const contentDiv = messageDiv.querySelector('.message-content');
+        contentDiv.innerHTML = isError ? escapeHtml(content) : content;
+        if (isError) {
+            messageDiv.classList.add('error-message');
+        }
     }
 
-    // 初始化 Socket.IO 连接
-    let socket;
-    try {
-        socket = io('http://localhost:8081', {
-            transports: ['websocket'],  // 只使用 WebSocket
-            upgrade: false,             // 禁用传输升级
-            reconnectionAttempts: 3,    // 重连尝试次数
-            timeout: 10000,            // 增加连接超时时间
-            forceNew: true,            // 强制创建新连接
-            path: '/socket.io'         // 指定 Socket.IO 路径
+    // 设置消息观察器
+    function setupMessageObserver() {
+        const observer = new MutationObserver((mutations) => {
+            let shouldScroll = false;
+            
+            mutations.forEach((mutation) => {
+                if (mutation.addedNodes.length > 0) {
+                    shouldScroll = true;
+                }
+            });
+
+            if (shouldScroll) {
+                // 使用 requestAnimationFrame 确保在DOM更新后滚动
+                requestAnimationFrame(() => {
+                    scrollToBottom(true);
+                });
+            }
         });
-    } catch (error) {
-        console.error('Error initializing Socket.IO:', error);
-        updateStatusIndicator('Socket.IO 连接初始化失败', 'danger');
-        return;
+
+        observer.observe(elements.chatMessages, { 
+            childList: true,
+            subtree: true,
+            characterData: true
+        });
     }
 
-    // 更新发送按钮状态
-    function updateSendButtonState(isEnabled, isLoading = false) {
-        sendButton.disabled = !isEnabled || isLoading;
-        sendButton.innerHTML = isLoading ? 
-            '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> 发送中...' : 
-            '发送';
+    // 滚动到底部
+    function scrollToBottom(smooth = true) {
+        const chatMessages = elements.chatMessages;
+        const lastMessage = chatMessages.lastElementChild;
+        
+        if (lastMessage) {
+            const containerHeight = chatMessages.clientHeight;
+            const scrollTop = chatMessages.scrollTop;
+            const scrollHeight = chatMessages.scrollHeight;
+            const messageHeight = lastMessage.offsetHeight;
+            const isNearBottom = (scrollHeight - scrollTop - containerHeight) < messageHeight * 2;
+
+            // 只有当用户已经在接近底部时才自动滚动
+            if (isNearBottom) {
+                chatMessages.scrollTo({
+                    top: scrollHeight,
+                    behavior: smooth ? 'smooth' : 'auto'
+                });
+            }
+        }
     }
 
-    // 显示系统消息
-    function showSystemMessage(message, type = 'info') {
-        updateStatusIndicator(message, type === 'info' ? 'success' : type);
-    }
-
-    // 连接成功事件
-    socket.on('connect', () => {
-        console.log('Connected to Socket.IO server');
-        updateStatusIndicator('已连接到服务器', 'success');
-        updateSendButtonState(true);
-    });
-
-    // 连接错误事件
-    socket.on('connect_error', (error) => {
-        console.error('Connection error:', error);
-        updateStatusIndicator('连接失败: ' + error.message, 'danger');
-        updateSendButtonState(false);
-    });
-
-    // 断开连接事件
-    socket.on('disconnect', (reason) => {
-        console.log('Disconnected:', reason);
-        updateStatusIndicator('已断开连接: ' + reason, 'warning');
-        updateSendButtonState(false);
-    });
-
-    // 重连尝试事件
-    socket.on('reconnect_attempt', (attemptNumber) => {
-        console.log('Attempting to reconnect:', attemptNumber);
-        updateStatusIndicator('正在尝试重新连接...', 'info');
-    });
-
-    // 重连成功事件
-    socket.on('reconnect', (attemptNumber) => {
-        console.log('Reconnected after', attemptNumber, 'attempts');
-        updateStatusIndicator('重新连接成功', 'success');
-    });
-
-    // HTML 转义函数
+    // HTML 转义（仅用于错误消息）
     function escapeHtml(unsafe) {
         return unsafe
             .replace(/&/g, "&amp;")
@@ -105,109 +280,106 @@ document.addEventListener('DOMContentLoaded', () => {
             .replace(/'/g, "&#039;");
     }
 
-    // 发送消息函数
-    async function sendMessage() {
-        const message = messageInput.value.trim();
-        if (!message) return;
+    // 显示系统消息
+    function showSystemMessage(message, type = 'info') {
+        elements.statusBar.innerHTML = `
+            <div class="status-indicator status-${type}">
+                ${message}
+            </div>
+        `;
+    }
 
-        // 禁用输入和发送按钮
-        messageInput.disabled = true;
-        updateSendButtonState(false, true);
+    // 切换侧边栏
+    function toggleSidebar() {
+        elements.sidebar.classList.toggle('show');
+        elements.sidebarBackdrop.classList.toggle('show');
+        document.body.style.overflow = elements.sidebar.classList.contains('show') ? 'hidden' : '';
+    }
+
+    // 开始新对话
+    function startNewChat() {
+        elements.chatMessages.innerHTML = '';
+        showSystemMessage('开始新对话', 'info');
+    }
+
+    // 加载历史对话
+    function loadHistoryChat(chatId) {
+        // TODO: 实现历史对话加载逻辑
+        console.log('加载历史对话:', chatId);
+    }
+
+    // 初始化 Socket.IO 连接
+    function initializeSocketIO() {
+        // 检查 Socket.IO 是否加载
+        if (typeof io === 'undefined') {
+            console.error('Socket.IO not loaded');
+            showSystemMessage('Socket.IO 未能正确加载', 'danger');
+            return;
+        }
+
+        // 获取当前主机和端口
+        const currentHost = window.location.hostname;
+        const socketPort = '8081'; // Socket.IO 服务器端口
 
         try {
-            // 显示用户消息
-            const userMessageDiv = document.createElement('div');
-            userMessageDiv.className = 'message mb-3 user-message';
-            userMessageDiv.innerHTML = `
-                <div class="message-sender">我</div>
-                <div class="message-content bg-white border p-3 rounded">${escapeHtml(message)}</div>
-            `;
-            chatMessages.appendChild(userMessageDiv);
-            chatMessages.scrollTop = chatMessages.scrollHeight;
-
-            // 发送消息到服务器
-            socket.emit('chat message', {
-                type: 'text',
-                content: message,
-                time: new Date().getTime()
+            const socket = io(`http://${currentHost}:${socketPort}`, {
+                transports: ['websocket', 'polling'], // 允许降级到轮询
+                upgrade: true,                        // 允许传输升级
+                reconnectionAttempts: 5,              // 增加重连次数
+                reconnectionDelay: 1000,              // 重连延迟
+                timeout: 20000,                       // 增加超时时间
+                forceNew: true,
+                path: '/static/socket.io'
             });
 
-            // 清空输入框
-            messageInput.value = '';
+            // 添加连接事件监听
+            socket.on('connect_error', (error) => {
+                console.error('连接错误:', error);
+                if (error.message.includes('xhr poll error')) {
+                    // 如果是轮询错误，尝试切换到 WebSocket
+                    socket.io.opts.transports = ['websocket'];
+                }
+                showSystemMessage(`连接失败: ${error.message}`, 'danger');
+            });
+
+            socket.io.on('error', (error) => {
+                console.error('传输错误:', error);
+                showSystemMessage('网络连接不稳定，请检查网络设置', 'warning');
+            });
+
+            socket.io.on('reconnect_attempt', (attempt) => {
+                console.log(`第 ${attempt} 次重连尝试`);
+                showSystemMessage(`正在尝试重新连接(${attempt}/5)...`, 'warning');
+            });
+
+            socket.io.on('reconnect_failed', () => {
+                console.error('重连失败');
+                showSystemMessage('无法连接到服务器，请刷新页面重试', 'danger');
+            });
+
+            // 连接成功事件
+            socket.on('connect', () => {
+                console.log('Connected to Socket.IO server');
+                showSystemMessage('已连接到服务器', 'success');
+                setInputState(true);
+            });
+
+            // 断开连接事件
+            socket.on('disconnect', (reason) => {
+                console.log('Disconnected:', reason);
+                showSystemMessage(`已断开连接: ${reason}`, 'warning');
+                setInputState(false);
+            });
+
+            // 重连成功事件
+            socket.on('reconnect', (attemptNumber) => {
+                console.log('Reconnected after', attemptNumber, 'attempts');
+                showSystemMessage('重新连接成功', 'success');
+            });
+
         } catch (error) {
-            console.error('Error sending message:', error);
-            showSystemMessage('发送消息失败，请重试', 'danger');
-        } finally {
-            // 恢复输入和发送按钮状态
-            messageInput.disabled = false;
-            updateSendButtonState(true);
-            messageInput.focus();
+            console.error('Error initializing Socket.IO:', error);
+            showSystemMessage('Socket.IO 连接初始化失败', 'danger');
         }
     }
-
-    // 监听输入框内容变化
-    messageInput.addEventListener('input', () => {
-        updateSendButtonState(messageInput.value.trim().length > 0);
-    });
-
-    // 监听回车键发送消息
-    messageInput.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter' && !e.shiftKey) {
-            e.preventDefault();
-            if (!sendButton.disabled) {
-                sendMessage();
-            }
-        }
-    });
-
-    // 监听发送按钮点击事件
-    sendButton.addEventListener('click', sendMessage);
-
-    // 接收消息
-    socket.on('chat message', (msg) => {
-        const messageDiv = document.createElement('div');
-        messageDiv.className = 'message mb-3';
-        
-        const senderDiv = document.createElement('div');
-        senderDiv.className = 'message-sender';
-        senderDiv.textContent = msg.isSent ? '我' : 'DeepSeek';
-        
-        const contentDiv = document.createElement('div');
-        contentDiv.className = `message-content p-3 rounded ${msg.isSent ? 'bg-white border' : 'bg-light'}`;
-        contentDiv.textContent = msg.content; // textContent 自动转义
-        
-        messageDiv.appendChild(senderDiv);
-        messageDiv.appendChild(contentDiv);
-        chatMessages.appendChild(messageDiv);
-        chatMessages.scrollTop = chatMessages.scrollHeight;
-    });
-
-    // 新建对话按钮点击事件
-    newChatBtn.addEventListener('click', () => {
-        chatMessages.innerHTML = '';
-        showSystemMessage('已开始新对话', 'info');
-    });
-
-    // 初始化发送按钮状态
-    updateSendButtonState(false);
 });
-
-// 添加消息到聊天区域
-function addMessage(sender, content) {
-    const messagesDiv = document.getElementById('chat-messages');
-    const messageDiv = document.createElement('div');
-    messageDiv.className = 'message mb-3';
-    
-    // 如果是用户消息，添加user-message类
-    if (sender === '我') {
-        messageDiv.classList.add('user-message');
-    }
-    
-    messageDiv.innerHTML = `
-        <div class="message-sender">${sender}</div>
-        <div class="message-content ${sender === '我' ? 'bg-white border' : 'bg-light'} p-3 rounded">${escapeHtml(content)}</div>
-    `;
-    
-    messagesDiv.appendChild(messageDiv);
-    messagesDiv.scrollTop = messagesDiv.scrollHeight;
-}
