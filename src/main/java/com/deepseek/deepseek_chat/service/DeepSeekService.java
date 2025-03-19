@@ -9,13 +9,17 @@ import com.alibaba.dashscope.exception.ApiException;
 import com.alibaba.dashscope.exception.InputRequiredException;
 import com.alibaba.dashscope.exception.NoApiKeyException;
 import org.springframework.stereotype.Service;
-
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import java.util.Arrays;
 
 @Service
-public class DeepSeekService {
+public interface DeepSeekService {
 
-    public String askDeepSeek(String question) {
+    String processQuestion(String question);
+
+    void processQuestionStream(String question, SseEmitter emitter);
+
+    default String askDeepSeek(String question) {
         try {
             // 创建 DashScope Generation 对象
             Generation gen = new Generation();

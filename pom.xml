@@ -47,6 +47,11 @@
 			替换为最新版本号：https://mvnrepository.com/artifact/com.alibaba/dashscope-sdk-java -->
 			<version>2.18.2</version>
 		</dependency>
+		<dependency>
+			<groupId>org.apache.commons</groupId>
+			<artifactId>commons-text</artifactId>
+			<version>1.10.0</version>
+		</dependency>
 		<!-- Spring Boot 依赖 -->
 		<dependency>
 			<groupId>org.springframework.boot</groupId>

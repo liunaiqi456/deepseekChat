@@ -109,47 +109,110 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // 处理表单提交
-    async function handleSubmit(event) {
-        event.preventDefault();
-        const message = elements.messageInput.value.trim();
-        if (!message || elements.sendButton.disabled) return;
-
+    // 发送消息并获取流式响应（POST方式）
+    async function askQuestionStreamPost(question) {
         try {
-            await sendMessage(message);
+            // 显示用户的问题
+            addMessage(question, 'user');
+            
+            // 创建一个新的消息容器用于AI的回复
+            const response = await fetch('/chat/stream', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ question: question })
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let buffer = '';
+            let messageContainer = null;
+
+            while (true) {
+                const { value, done } = await reader.read();
+                if (done) break;
+
+                buffer += decoder.decode(value, { stream: true });
+                
+                // 按行分割
+                const lines = buffer.split('\n');
+                buffer = lines.pop() || ''; // 保留最后一个不完整的行
+
+                for (let i = 0; i < lines.length; i++) {
+                    const line = lines[i].trim();
+                    
+                    // 跳过空行
+                    if (line === '') continue;
+                    
+                    // 处理data行
+                    if (line.startsWith('data:')) {
+                        // 处理可能的多重data:前缀
+                        let data = line;
+                        while (data.startsWith('data:')) {
+                            data = data.slice(5).trim();
+                        }
+                        
+                        // 如果是[DONE]标记，结束处理
+                        if (data === '[DONE]') {
+                            setInputState(true);
+                            continue;
+                        }
+                        
+                        try {
+                            const parsed = JSON.parse(data);
+                            if (parsed.content) {
+                                const decodedContent = decodeHtmlEntities(parsed.content);
+                                
+                                // 如果是第一条消息，创建新的消息容器
+                                if (!messageContainer) {
+                                    messageContainer = document.createElement('div');
+                                    messageContainer.className = 'message assistant';
+                                    elements.chatMessages.appendChild(messageContainer);
+                                }
+                                
+                                // 更新消息内容
+                                messageContainer.innerHTML = `<div class="message-content">${decodedContent}</div>`;
+                                
+                                // 滚动到底部
+                                elements.chatMessages.scrollTop = elements.chatMessages.scrollHeight;
+                            }
+                        } catch (e) {
+                            // 忽略[DONE]标记的解析错误
+                            if (data !== '[DONE]') {
+                                console.error('解析消息时出错:', e);
+                            }
+                        }
+                    }
+                }
+            }
         } catch (error) {
-            console.error('发送消息失败:', error);
-            showSystemMessage('发送消息失败: ' + error.message, 'danger');
+            console.error('发送请求时出错:', error);
+            appendMessage('发送请求时出错: ' + error.message);
+        } finally {
+            // 重置输入状态
+            elements.messageInput.value = '';
+            elements.messageInput.disabled = false;
+            elements.sendButton.disabled = false;
         }
     }
 
-    // 发送消息
-    async function sendMessage(message) {
-        // 禁用输入
-        setInputState(false);
+    // 修改handleSubmit函数，添加POST方式的支持
+    async function handleSubmit(e) {
+        e.preventDefault();
         
-        // 显示用户消息
-        addMessage(message, true);
+        const message = elements.messageInput.value.trim();
+        if (!message) return;
         
-        try {
-            const response = await fetch(`http://localhost:8080/chat/asks?question=${encodeURIComponent(message)}`, {
-                method: 'GET',
-                headers: {
-                    'Accept': 'text/event-stream',
-                    'Cache-Control': 'no-cache',
-                    'Connection': 'keep-alive'
-                }
-            });
-
-            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-            
-            // 处理流式响应
-            await handleStreamResponse(response);
-            
-        } finally {
-            // 重置输入状态
-            setInputState(true);
-        }
+        // 清空输入框
+        elements.messageInput.value = '';
+        
+        // 使用POST方式发送消息
+        await askQuestionStreamPost(message);
     }
 
     // 设置输入状态
@@ -183,7 +246,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (!messageDiv) {
                     messageDiv = createMessageElement('DeepSeek', responseText);
                     elements.chatMessages.appendChild(messageDiv);
-                } else {
+        } else {
                     updateMessageContent(messageDiv, responseText);
                 }
             }
@@ -206,11 +269,39 @@ document.addEventListener('DOMContentLoaded', () => {
         return div;
     }
 
-    // 添加消息到聊天区域
+    // 添加消息到聊天区域（带发送者信息）
     function addMessage(content, isUser = false) {
         const messageDiv = createMessageElement(isUser ? '用户' : 'DeepSeek', content, isUser);
         elements.chatMessages.appendChild(messageDiv);
         scrollToBottom();
+    }
+
+    // 添加消息到聊天区域（简单版本）
+    function appendMessage(content) {
+        const messageContainer = document.createElement('div');
+        messageContainer.className = 'message';
+        
+        // 创建一个临时元素来解码HTML实体
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = content
+            .replace(/&quot;/g, '"')
+            .replace(/&lt;/g, '<')
+            .replace(/&gt;/g, '>')
+            .replace(/&amp;/g, '&')
+            .replace(/&#39;/g, "'")
+            .replace(/&#47;/g, "/");
+        
+        // 获取解码后的文本
+        messageContainer.innerHTML = tempDiv.innerHTML;
+        
+        elements.chatMessages.appendChild(messageContainer);
+        elements.chatMessages.scrollTop = elements.chatMessages.scrollHeight;
+    }
+
+    function decodeHtmlEntities(text) {
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = text;
+        return tempDiv.textContent;
     }
 
     // 更新消息内容

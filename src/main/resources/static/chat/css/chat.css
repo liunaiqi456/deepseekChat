@@ -106,10 +106,96 @@ body, html {
 .message-content {
     border-radius: var(--border-radius-lg);
     padding: 0.75rem 1rem;
-    line-height: 1.5;
-    font-size: 0.95rem;
+    line-height: 1.6;
+    font-size: 14px;
     white-space: pre-wrap;
     word-wrap: break-word;
+}
+
+.message-content h1,
+.message-content h2,
+.message-content h3,
+.message-content h4,
+.message-content h5,
+.message-content h6 {
+    margin-top: 1.5em;
+    margin-bottom: 1em;
+    font-weight: 600;
+}
+
+.message-content h1 { font-size: 1.8em; }
+.message-content h2 { font-size: 1.6em; }
+.message-content h3 { font-size: 1.4em; }
+.message-content h4 { font-size: 1.2em; }
+
+.message-content p {
+    margin: 1em 0;
+}
+
+.message-content pre {
+    background-color: #f6f8fa;
+    border-radius: 6px;
+    padding: 16px;
+    overflow: auto;
+    margin: 1em 0;
+}
+
+.message-content code {
+    font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, Courier, monospace;
+    font-size: 13px;
+    padding: 0.2em 0.4em;
+    background-color: #f6f8fa;
+    border-radius: 3px;
+}
+
+.message-content pre code {
+    padding: 0;
+    background-color: transparent;
+}
+
+.message-content ul,
+.message-content ol {
+    margin: 1em 0;
+    padding-left: 2em;
+}
+
+.message-content li {
+    margin: 0.5em 0;
+}
+
+.message-content blockquote {
+    margin: 1em 0;
+    padding-left: 1em;
+    border-left: 4px solid #dfe2e5;
+    color: #6a737d;
+}
+
+.message-content img {
+    max-width: 100%;
+    height: auto;
+}
+
+.message-content table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 1em 0;
+}
+
+.message-content th,
+.message-content td {
+    padding: 8px;
+    border: 1px solid #dfe2e5;
+}
+
+.message-content th {
+    background-color: #f6f8fa;
+    font-weight: 600;
+}
+
+/* 代码高亮主题覆盖 */
+.hljs {
+    background: #f6f8fa !important;
+    padding: 0 !important;
 }
 
 /* 数学公式样式 */
