@@ -94,53 +94,102 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 处理键盘事件
     function handleKeyPress(event) {
-        // Alt + Enter 换行
-        if (event.key === 'Enter' && event.altKey) {
-            event.preventDefault();
-            const start = event.target.selectionStart;
-            const end = event.target.selectionEnd;
-            const value = event.target.value;
-            event.target.value = value.substring(0, start) + '\n' + value.substring(end);
-            event.target.selectionStart = event.target.selectionEnd = start + 1;
-            return;
-        }
-        
-        // Enter 发送消息
-        if (event.key === 'Enter' && !event.altKey && !event.shiftKey) {
+        // 如果按下Enter键且没有按下Shift键和Alt键，则发送消息
+        if (event.key === 'Enter' && !event.shiftKey && !event.altKey) {
             event.preventDefault();
             handleSubmit(event);
+        }
+        // 如果按下Enter键且按下Alt键或Shift键，则插入换行
+        else if (event.key === 'Enter' && (event.altKey || event.shiftKey)) {
+            event.preventDefault();
+            const input = event.target;
+            const start = input.selectionStart;
+            const end = input.selectionEnd;
+            const value = input.value;
+            const beforeCursor = value.substring(0, start);
+            const afterCursor = value.substring(end);
+            
+            // 检查光标前后是否已经有换行符
+            const needsLeadingNewline = start > 0 && beforeCursor.charAt(beforeCursor.length - 1) !== '\n';
+            const needsTrailingNewline = end < value.length && afterCursor.charAt(0) !== '\n';
+            
+            // 根据上下文添加适当的换行符
+            let newValue = beforeCursor;
+            if (needsLeadingNewline) {
+                newValue += '\n';
+            }
+            if (needsTrailingNewline) {
+                newValue += '\n';
+            }
+            newValue += afterCursor;
+            
+            // 更新输入框的值
+            input.value = newValue;
+            
+            // 将光标移动到新的位置
+            const newPosition = start + (needsLeadingNewline ? 1 : 0);
+            input.selectionStart = input.selectionEnd = newPosition;
+            
+            // 触发input事件以调整文本框高度
+            input.dispatchEvent(new Event('input'));
         }
     }
 
     // 处理消息的显示
     function updateMessageDisplay(messageContainer, content) {
         try {
-            // 解码HTML实体
-            const decodedContent = decodeHtmlEntities(content);
+            // 检测内容是否包含代码块
+            const hasCodeBlock = content.includes('```') || content.includes('`');
             
             // 使用marked渲染Markdown
             let renderedContent = content;
             if (typeof marked !== 'undefined') {
-                renderedContent = marked.parse(decodedContent);
+                // 如果内容不包含代码块，但看起来像代码，自动添加代码块标记
+                if (!hasCodeBlock && looksLikeCode(content)) {
+                    renderedContent = '```\n' + content + '\n```';
+                }
+                renderedContent = marked.parse(renderedContent);
             }
             
             // 更新消息容器内容
-            const contentDiv = messageContainer.querySelector('.message-content') || messageContainer;
-            contentDiv.innerHTML = renderedContent;
-            
-            // 应用代码高亮
-            if (typeof hljs !== 'undefined') {
-                contentDiv.querySelectorAll('pre code').forEach((block) => {
-                    hljs.highlightBlock(block);
-                });
+            const contentDiv = messageContainer.querySelector('.message-content');
+            if (contentDiv) {
+                contentDiv.innerHTML = renderedContent;
+                
+                // 应用代码高亮
+                if (typeof hljs !== 'undefined') {
+                    contentDiv.querySelectorAll('pre code').forEach((block) => {
+                        hljs.highlightBlock(block);
+                    });
+                }
             }
             
             // 滚动到底部
             scrollToBottom();
         } catch (error) {
             console.error('更新消息显示时出错:', error);
-            messageContainer.innerHTML = `<div class="message-content">${content}</div>`;
+            const contentDiv = messageContainer.querySelector('.message-content');
+            if (contentDiv) {
+                contentDiv.textContent = content;
+            }
         }
+    }
+
+    // 检查文本是否看起来像代码
+    function looksLikeCode(text) {
+        // 检查是否包含常见的代码特征
+        const codeIndicators = [
+            /^[\s]*[{}\[\]]/,           // 以括号开始
+            /[;{}()\[\]]{3,}/,          // 包含多个括号或分号
+            /\b(function|class|if|for|while|return|var|let|const)\b/, // 常见关键字
+            /^[\s]*[a-zA-Z]+[\w\s]*\([^\)]*\)[\s]*{/,  // 函数定义
+            /^[\s]*import\s+|^[\s]*export\s+/,          // import/export 语句
+            /[\s]*[a-zA-Z_$][a-zA-Z0-9_$]*\s*=\s*/,    // 变量赋值
+            /^[\s]*<[a-zA-Z]/,          // HTML标签
+            /^[\s]*#include|^[\s]*#define/  // C/C++预处理指令
+        ];
+
+        return codeIndicators.some(pattern => pattern.test(text));
     }
 
     // 发送消息并获取流式响应（POST方式）
@@ -202,13 +251,16 @@ document.addEventListener('DOMContentLoaded', () => {
                     try {
                         const parsed = JSON.parse(line);
                         if (parsed && parsed.content) {
+                            // 解码HTML实体
+                            const decodedContent = decodeHtmlEntities(parsed.content);
+                            
                             // 如果是第一条消息，创建新的消息容器
                             if (!messageContainer) {
                                 messageContainer = addMessage('', 'assistant');
                             }
                             
                             // 更新消息显示
-                            updateMessageDisplay(messageContainer, parsed.content);
+                            updateMessageDisplay(messageContainer, decodedContent);
                         }
                     } catch (e) {
                         // 忽略[DONE]标记的解析错误
@@ -227,19 +279,58 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // 修改handleSubmit函数，添加POST方式的支持
-    async function handleSubmit(e) {
-        e.preventDefault();
-        
-        const message = elements.messageInput.value.trim();
-        if (!message) return;
-        
-        // 清空输入框
-        elements.messageInput.value = '';
-        
-        // 使用POST方式发送消息
-        await askQuestionStreamPost(message);
+    // HTML实体解码函数
+    function decodeHtmlEntities(text) {
+        const textarea = document.createElement('textarea');
+        textarea.innerHTML = text
+            .replace(/&quot;/g, '"')
+            .replace(/&lt;/g, '<')
+            .replace(/&gt;/g, '>')
+            .replace(/&amp;/g, '&')
+            .replace(/&#39;/g, "'")
+            .replace(/&#47;/g, "/");
+        return textarea.value;
     }
+
+    // 处理表单提交
+    async function handleSubmit(event) {
+        event.preventDefault();
+        const question = elements.messageInput.value.trim();
+        
+        if (question) {
+            // 立即清空并重置输入框
+            elements.messageInput.value = '';
+            elements.messageInput.style.height = 'auto';
+            elements.messageInput.style.height = `${Math.min(elements.messageInput.scrollHeight, 200)}px`;
+            
+            // 禁用输入和发送按钮
+            setInputState(false);
+            
+            try {
+                await askQuestionStreamPost(question);
+            } catch (error) {
+                console.error('发送消息时出错:', error);
+                showSystemMessage('发送消息失败，请重试', 'error');
+                setInputState(true);
+            }
+        }
+    }
+
+    // 处理输入框自动调整高度
+    function adjustTextareaHeight(textarea) {
+        textarea.style.height = 'auto';
+        textarea.style.height = `${Math.min(textarea.scrollHeight, 200)}px`;
+    }
+
+    // 监听输入框内容变化
+    elements.messageInput.addEventListener('input', function() {
+        adjustTextareaHeight(this);
+    });
+
+    // 监听输入框按键事件
+    elements.messageInput.addEventListener('keydown', function(e) {
+        handleKeyPress(e);
+    });
 
     // 设置输入状态
     function setInputState(enabled) {
@@ -309,16 +400,11 @@ document.addEventListener('DOMContentLoaded', () => {
         // 添加消息内容容器
         const contentDiv = document.createElement('div');
         contentDiv.className = 'message-content';
-        
-        // 根据消息类型处理内容
-        if (type === 'user') {
-            contentDiv.textContent = content;
-        } else {
-            // AI消息可能包含markdown，所以使用innerHTML
-            contentDiv.innerHTML = content;
-        }
-        
         messageDiv.appendChild(contentDiv);
+        
+        // 所有消息都使用Markdown渲染
+        updateMessageDisplay(messageDiv, content);
+        
         elements.chatMessages.appendChild(messageDiv);
         scrollToBottom();
         return messageDiv;
@@ -570,13 +656,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     sanitize: false
                 });
                 console.log('Markdown和代码高亮功能已加载');
-            } else {
-                console.error('Marked or Highlight.js failed to load');
-                showSystemMessage('代码高亮功能加载失败', 'warning');
             }
         } catch (error) {
-            console.error('Failed to load external resources:', error);
-            showSystemMessage('外部资源加载失败，部分功能可能不可用', 'warning');
+            console.error('加载外部资源失败:', error);
+            showSystemMessage('部分功能可能不可用', 'warning');
         }
     }
 

@@ -88,67 +88,146 @@ body, html {
 .message {
     display: flex;
     flex-direction: column;
-    margin-bottom: 1.5rem;
+    margin: 1rem 0;
     max-width: 85%;
-    padding: 0.5rem;
+    animation: fadeIn 0.3s ease-in-out;
 }
 
+/* 用户消息靠右 */
 .message.user {
-    align-self: flex-end;
     margin-left: auto;
+    margin-right: 1rem;
 }
 
+/* AI消息靠左 */
 .message.assistant {
-    align-self: flex-start;
+    margin-right: auto;
+    margin-left: 1rem;
 }
 
+/* 发送者标识样式 */
 .message-sender {
-    font-size: 0.875rem;
-    color: var(--color-text-light);
-    margin-bottom: 0.5rem;
-    padding: 0 0.5rem;
+    font-size: 0.9rem;
+    margin-bottom: 0.3rem;
+    padding: 0 1.2rem;
+}
+
+/* AI发送者标识样式 */
+.assistant .message-sender {
+    color: #666;
+}
+
+/* 用户发送者标识样式 */
+.user .message-sender {
+    color: #1a73e8;
+    text-align: right;
+    padding-right: 0.5rem;
+}
+
+/* 用户消息样式 */
+.user .message-content {
+    background: #1a73e8;
+    color: white;
+    border-radius: 1.2rem 1.2rem 0 1.2rem;
+    padding: 0.8rem 1.2rem;
+    box-shadow: 0 2px 4px rgba(26, 115, 232, 0.2);
+}
+
+/* AI消息样式 */
+.assistant .message-content {
+    background: #f8f9fa;
+    color: #2c3e50;
+    border-radius: 1.2rem 1.2rem 1.2rem 0;
+    padding: 0.8rem 1.2rem;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+    border: 1px solid #e9ecef;
+}
+
+/* 用户消息中的代码块样式 */
+.user .message-content pre {
+    background-color: rgba(255, 255, 255, 0.1) !important;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    margin: 0.5em 0;
+}
+
+.user .message-content code {
+    color: #fff;
+    background-color: rgba(255, 255, 255, 0.15);
+}
+
+.user .message-content a {
+    color: #fff;
+    text-decoration: underline;
+}
+
+/* AI消息中的代码块样式 */
+.assistant .message-content pre {
+    background-color: #1e1e1e;
+    border: 1px solid #2d2d2d;
+    margin: 0.5em 0;
+}
+
+/* 消息动画 */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* 适配深色模式 */
+@media (prefers-color-scheme: dark) {
+    .assistant .message-content {
+        background: #2d2d2d;
+        color: #e0e0e0;
+        border-color: #3d3d3d;
+    }
+    
+    .assistant .message-sender {
+        color: #999;
+    }
+    
+    .message.user {
+        color: #60a5fa;
+    }
+    
+    .user .message-sender {
+        color: #60a5fa;
+    }
+    
+    .user .message-content {
+        background: #60a5fa;
+        box-shadow: 0 2px 4px rgba(96, 165, 250, 0.2);
+    }
+}
+
+/* 移动端适配 */
+@media (max-width: 768px) {
+    .message {
+        max-width: 90%;
+    }
+    
+    .message.user {
+        margin-right: 0.5rem;
+    }
+    
+    .message.assistant {
+        margin-left: 0.5rem;
+    }
 }
 
 .message-content {
-    border-radius: var(--border-radius-lg);
-    padding: 1rem;
     line-height: 1.6;
-    font-size: 14px;
-    white-space: pre-wrap;
-    word-wrap: break-word;
     overflow-wrap: break-word;
+    word-wrap: break-word;
 }
 
-.user .message-content {
-    background-color: var(--color-primary);
-    color: white;
-}
-
-.assistant .message-content {
-    background-color: var(--color-bg-light);
-    color: var(--color-text);
-}
-
-/* 代码块样式优化 */
-.message-content pre {
-    background-color: #f6f8fa;
-    border-radius: 6px;
-    padding: 1rem;
-    margin: 0.5rem 0;
-    overflow-x: auto;
-}
-
-.message-content code {
-    font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, Courier, monospace;
-    font-size: 13px;
-    padding: 0.2em 0.4em;
-    border-radius: 3px;
-}
-
-.user .message-content pre,
-.user .message-content code {
-    background-color: rgba(255, 255, 255, 0.1);
-    color: white;
+.message-content p {
+    margin: 0.5em 0;
 }
 
 .message-content h1,
@@ -157,46 +236,79 @@ body, html {
 .message-content h4,
 .message-content h5,
 .message-content h6 {
-    margin-top: 1.5em;
-    margin-bottom: 1em;
+    margin: 1em 0 0.5em;
+    line-height: 1.4;
     font-weight: 600;
 }
 
-.message-content h1 { font-size: 1.8em; }
-.message-content h2 { font-size: 1.6em; }
-.message-content h3 { font-size: 1.4em; }
-.message-content h4 { font-size: 1.2em; }
+.message-content pre {
+    background-color: #1e1e1e;
+    border-radius: 6px;
+    padding: 1em;
+    overflow-x: auto;
+    margin: 0.5em 0;
+}
 
-.message-content p {
-    margin: 1em 0;
+.message-content code {
+    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+    font-size: 0.9em;
+    padding: 0.2em 0.4em;
+    border-radius: 3px;
+    background-color: rgba(0, 0, 0, 0.1);
+}
+
+.message-content pre code {
+    background-color: transparent;
+    padding: 0;
+    border-radius: 0;
+}
+
+.message-content ul,
+.message-content ol {
+    margin: 0.5em 0;
+    padding-left: 2em;
+}
+
+.message-content li {
+    margin: 0.3em 0;
+}
+
+.message-content blockquote {
+    margin: 0.5em 0;
+    padding: 0.5em 1em;
+    border-left: 4px solid #ddd;
+    background-color: rgba(0, 0, 0, 0.05);
 }
 
 .message-content img {
     max-width: 100%;
     height: auto;
+    border-radius: 4px;
+    margin: 0.5em 0;
 }
 
 .message-content table {
     border-collapse: collapse;
     width: 100%;
-    margin: 1em 0;
+    margin: 0.5em 0;
 }
 
 .message-content th,
 .message-content td {
-    padding: 8px;
-    border: 1px solid #dfe2e5;
+    border: 1px solid #ddd;
+    padding: 0.5em;
+    text-align: left;
 }
 
 .message-content th {
-    background-color: #f6f8fa;
-    font-weight: 600;
+    background-color: rgba(0, 0, 0, 0.05);
 }
 
 /* 代码高亮主题覆盖 */
 .hljs {
-    background: #f6f8fa !important;
-    padding: 0 !important;
+    background: #1e1e1e !important;
+    color: #d4d4d4 !important;
+    padding: 1em !important;
 }
 
 /* 数学公式样式 */
