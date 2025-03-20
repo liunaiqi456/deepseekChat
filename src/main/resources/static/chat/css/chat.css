@@ -90,26 +90,65 @@ body, html {
     flex-direction: column;
     margin-bottom: 1.5rem;
     max-width: 85%;
+    padding: 0.5rem;
 }
 
-.message.user-message {
+.message.user {
     align-self: flex-end;
+    margin-left: auto;
+}
+
+.message.assistant {
+    align-self: flex-start;
 }
 
 .message-sender {
     font-size: 0.875rem;
     color: var(--color-text-light);
-    margin-bottom: 0.25rem;
+    margin-bottom: 0.5rem;
     padding: 0 0.5rem;
 }
 
 .message-content {
     border-radius: var(--border-radius-lg);
-    padding: 0.75rem 1rem;
+    padding: 1rem;
     line-height: 1.6;
     font-size: 14px;
     white-space: pre-wrap;
     word-wrap: break-word;
+    overflow-wrap: break-word;
+}
+
+.user .message-content {
+    background-color: var(--color-primary);
+    color: white;
+}
+
+.assistant .message-content {
+    background-color: var(--color-bg-light);
+    color: var(--color-text);
+}
+
+/* 代码块样式优化 */
+.message-content pre {
+    background-color: #f6f8fa;
+    border-radius: 6px;
+    padding: 1rem;
+    margin: 0.5rem 0;
+    overflow-x: auto;
+}
+
+.message-content code {
+    font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, Courier, monospace;
+    font-size: 13px;
+    padding: 0.2em 0.4em;
+    border-radius: 3px;
+}
+
+.user .message-content pre,
+.user .message-content code {
+    background-color: rgba(255, 255, 255, 0.1);
+    color: white;
 }
 
 .message-content h1,
@@ -130,44 +169,6 @@ body, html {
 
 .message-content p {
     margin: 1em 0;
-}
-
-.message-content pre {
-    background-color: #f6f8fa;
-    border-radius: 6px;
-    padding: 16px;
-    overflow: auto;
-    margin: 1em 0;
-}
-
-.message-content code {
-    font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, Courier, monospace;
-    font-size: 13px;
-    padding: 0.2em 0.4em;
-    background-color: #f6f8fa;
-    border-radius: 3px;
-}
-
-.message-content pre code {
-    padding: 0;
-    background-color: transparent;
-}
-
-.message-content ul,
-.message-content ol {
-    margin: 1em 0;
-    padding-left: 2em;
-}
-
-.message-content li {
-    margin: 0.5em 0;
-}
-
-.message-content blockquote {
-    margin: 1em 0;
-    padding-left: 1em;
-    border-left: 4px solid #dfe2e5;
-    color: #6a737d;
 }
 
 .message-content img {
@@ -220,68 +221,76 @@ body, html {
     border-radius: 2px;
 }
 
-/* 用户消息样式 */
-.user-message .message-content {
-    background-color: var(--color-primary);
-    color: white;
+/* 输入区域相关样式 */
+.input-container {
+    padding: 1rem 20%;
+    background-color: var(--color-bg);
+    border-top: 1px solid var(--color-border);
+    position: sticky;
+    bottom: 0;
+    z-index: 10;
 }
 
-/* AI消息样式 */
-.ai-message .message-content {
-    background-color: var(--color-bg-light);
-    color: var(--color-text);
-}
-
-/* 输入区域 */
 .chat-form {
     background-color: var(--color-bg);
-    padding: 1rem 20%;
-    border-top: 1px solid var(--color-border);
+    width: 100%;
 }
 
 .input-group {
-    background-color: var(--color-bg);
+    display: flex;
+    align-items: center;
+    background-color: var(--color-bg-light);
     border-radius: var(--border-radius-lg);
     box-shadow: var(--shadow-sm);
+    transition: box-shadow 0.2s ease;
+    overflow: hidden;
+}
+
+.input-group:focus-within {
+    box-shadow: var(--shadow-md);
 }
 
 #message-input {
+    min-height: 44px;
+    max-height: var(--input-height-max);
+    resize: none;
     border: 1px solid var(--color-border);
     border-radius: var(--border-radius-lg) 0 0 var(--border-radius-lg);
     padding: 0.75rem 1rem;
-    resize: none;
-    min-height: 46px;
-    max-height: var(--input-height-max);
+    font-size: 14px;
     line-height: 1.5;
-    font-size: 0.95rem;
+    overflow-y: auto;
+    flex-grow: 1;
+    background-color: var(--color-bg);
+    transition: border-color 0.2s ease;
 }
 
 #message-input:focus {
-    border-color: var(--color-primary);
-    box-shadow: 0 0 0 1px rgba(13, 110, 253, 0.15);
     outline: none;
+    border-color: var(--color-primary);
+    box-shadow: none;
 }
 
 #send-button {
-    margin-left: -1px;
+    height: 100%;
+    min-height: 44px;
+    border: none;
     border-radius: 0 var(--border-radius-lg) var(--border-radius-lg) 0;
-    padding: 0.75rem 1.25rem;
+    padding: 0 1.25rem;
     background-color: var(--color-primary);
-    border: 1px solid var(--color-primary);
     color: white;
-    transition: all var(--transition-speed) var(--transition-timing);
+    font-weight: 500;
+    transition: background-color 0.2s ease;
 }
 
 #send-button:not(:disabled):hover {
     background-color: var(--color-primary-dark);
-    transform: translateY(-1px);
-    box-shadow: var(--shadow-md);
+    cursor: pointer;
 }
 
 #send-button:disabled {
-    background-color: #e9ecef;
-    border-color: var(--color-border);
-    color: #6c757d;
+    background-color: #e2e8f0;
+    color: #a0aec0;
     cursor: not-allowed;
 }
 
@@ -324,6 +333,14 @@ body, html {
 
     #message-input {
         font-size: 16px;
+    }
+
+    .message {
+        max-width: 95%;
+    }
+    
+    .message-content {
+        font-size: 15px;
     }
 }
 
@@ -446,4 +463,93 @@ body, html {
 
 ::-webkit-scrollbar-thumb:hover {
     background: #a8a8a8;
+}
+
+/* 侧边栏背景遮罩 */
+.sidebar-backdrop {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+    z-index: 999;
+    display: none;
+    transition: opacity var(--transition-speed) var(--transition-timing);
+}
+
+.sidebar-backdrop.show {
+    display: block;
+}
+
+/* 侧边栏切换按钮样式 */
+.sidebar-toggle {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    background-color: var(--color-primary);
+    color: white;
+    border: none;
+    box-shadow: var(--shadow-md);
+    z-index: 998;
+    display: none;
+    cursor: pointer;
+    transition: background-color var(--transition-speed) var(--transition-timing);
+}
+
+.sidebar-toggle:hover {
+    background-color: var(--color-primary-dark);
+}
+
+.toggle-icon {
+    display: block;
+    position: relative;
+    width: 20px;
+    height: 2px;
+    background-color: white;
+    margin: 0 auto;
+}
+
+.toggle-icon::before,
+.toggle-icon::after {
+    content: '';
+    position: absolute;
+    width: 20px;
+    height: 2px;
+    background-color: white;
+    left: 0;
+}
+
+.toggle-icon::before {
+    top: -6px;
+}
+
+.toggle-icon::after {
+    bottom: -6px;
+}
+
+/* 输入容器 */
+.input-container {
+    padding: 1rem 20%;
+    background-color: var(--color-bg);
+    border-top: 1px solid var(--color-border);
+    margin-top: auto;
+}
+
+/* 输入框滚动条 */
+#message-input::-webkit-scrollbar {
+    width: 6px;
+}
+
+#message-input::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.05);
+    border-radius: 3px;
+}
+
+#message-input::-webkit-scrollbar-thumb {
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 3px;
 }
