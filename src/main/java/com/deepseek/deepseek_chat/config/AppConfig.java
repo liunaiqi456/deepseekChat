@@ -9,7 +9,7 @@ import org.springframework.context.annotation.Configuration;
 public class AppConfig {
 
     @Bean
-    public CommandLineRunner commandLineRunner(SocketIOServer socketIOServer) {
+    protected CommandLineRunner commandLineRunner(SocketIOServer socketIOServer) {
         return args -> {
             socketIOServer.start(); // 启动 Socket.IO 服务器
             System.out.println("Socket.IO server started on port 8081");

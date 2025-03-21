@@ -8,7 +8,7 @@ import org.springframework.context.annotation.Configuration;
 public class DashScopeConfig {
     
     @Bean
-    public Generation generation() {
+    protected  Generation generation() {
         return new Generation();
     }
 } 

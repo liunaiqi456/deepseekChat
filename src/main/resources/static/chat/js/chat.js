@@ -138,17 +138,62 @@ document.addEventListener('DOMContentLoaded', () => {
     // 处理消息的显示
     function updateMessageDisplay(messageContainer, content) {
         try {
-            // 检测内容是否包含代码块
-            const hasCodeBlock = content.includes('```') || content.includes('`');
+            // 调试日志：显示原始内容
+            console.log('原始内容:', content);
+
+            // 将Unicode转义序列转换回实际字符
+            const decodedContent = content
+                .replace(/\\u003C/g, '<')    // <
+                .replace(/\\u003E/g, '>')    // >
+                .replace(/\\u002F/g, '/')    // /
+                .replace(/\\u0022/g, '"')    // "
+                .replace(/\\u0027/g, "'")    // '
+                .replace(/\\u003D/g, '=')    // =
+                .replace(/\\u0020/g, ' ')    // 空格
+                .replace(/\\u000A/g, '\n')   // 换行
+                .replace(/\\u000D/g, '\r')   // 回车
+                .replace(/\\u0009/g, '\t')   // 制表符
+                .replace(/\\\\/g, '\\')      // 反斜杠
+                .replace(/\\n/g, '\n');      // 换行符
+
+            // 调试日志：显示转换后的内容
+            console.log('Unicode转换后的内容:', decodedContent);
             
             // 使用marked渲染Markdown
-            let renderedContent = content;
+            let renderedContent = decodedContent;
             if (typeof marked !== 'undefined') {
-                // 如果内容不包含代码块，但看起来像代码，自动添加代码块标记
-                if (!hasCodeBlock && looksLikeCode(content)) {
-                    renderedContent = '```\n' + content + '\n```';
+                // 配置marked
+                marked.setOptions({
+                    sanitize: false,
+                    breaks: true,
+                    langPrefix: 'hljs language-',
+                    highlight: function(code, lang) {
+                        if (typeof hljs !== 'undefined') {
+                            try {
+                                if (lang && hljs.getLanguage(lang)) {
+                                    return hljs.highlight(code, { language: lang }).value;
+                                }
+                                return hljs.highlightAuto(code).value;
+                            } catch (e) {
+                                console.error('代码高亮出错:', e);
+                                return code;
+                            }
+                        }
+                        return code;
+                    }
+                });
+                
+                // 处理代码块
+                if (decodedContent.includes('```')) {
+                    // 确保代码块前后有空行
+                    renderedContent = decodedContent
+                        .replace(/```(\w+)?\n/g, '\n```$1\n')
+                        .replace(/\n```/g, '\n```\n');
                 }
+                
                 renderedContent = marked.parse(renderedContent);
+                // 调试日志：显示Markdown渲染后的内容
+                console.log('Markdown渲染后的内容:', renderedContent);
             }
             
             // 更新消息容器内容
@@ -168,6 +213,7 @@ document.addEventListener('DOMContentLoaded', () => {
             scrollToBottom();
         } catch (error) {
             console.error('更新消息显示时出错:', error);
+            console.error('原始内容:', content);
             const contentDiv = messageContainer.querySelector('.message-content');
             if (contentDiv) {
                 contentDiv.textContent = content;
@@ -192,15 +238,18 @@ document.addEventListener('DOMContentLoaded', () => {
         return codeIndicators.some(pattern => pattern.test(text));
     }
 
+    // 生成会话ID
+    const sessionId = generateSessionId();
+    
     // 发送消息并获取流式响应（POST方式）
-    async function askQuestionStreamPost(question) {
+    async function askQuestionStreamPost(question, retryCount = 3) {
         try {
             // 显示用户的问题
             addMessage(question, 'user');
             
             // 禁用输入，表示正在处理
             setInputState(false);
-            showSystemMessage('正在处理您的请求...', 'info');
+            showSystemMessage('正在思考...', 'info');
             
             // 发送请求
             const response = await fetch('/chat/stream', {
@@ -208,88 +257,149 @@ document.addEventListener('DOMContentLoaded', () => {
                 headers: {
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({ question: question })
+                body: JSON.stringify({ 
+                    question: question,
+                    sessionId: sessionId
+                })
             });
 
+            // 处理HTTP错误
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
 
+            // 获取响应的文本流
             const reader = response.body.getReader();
             const decoder = new TextDecoder();
-            let buffer = '';
             let messageContainer = null;
+            let currentMessage = '';
+            let buffer = '';
 
+            // 读取流
             while (true) {
                 const { value, done } = await reader.read();
-                if (done) break;
-
-                buffer += decoder.decode(value, { stream: true });
                 
+                if (done) {
+                    console.log('流读取完成');
+                    break;
+                }
+                
+                // 解码新的数据块
+                const chunk = decoder.decode(value, { stream: true });
+                buffer += chunk;
+                
+                // 按行分割并处理每一行
                 const lines = buffer.split('\n');
-                buffer = lines.pop() || '';
-
-                for (let i = 0; i < lines.length; i++) {
-                    let line = lines[i].trim();
+                buffer = lines.pop() || ''; // 保存不完整的最后一行
+                
+                for (const line of lines) {
+                    if (!line.trim()) continue;  // 跳过空行
                     
-                    // 跳过空行
-                    if (line === '') continue;
-                    
-                    // 处理data行，移除所有"data:"前缀
-                    while (line.startsWith('data:')) {
-                        line = line.slice(5).trim();
-                    }
-                    
-                    // 如果是[DONE]标记，结束处理
-                    if (line === '[DONE]') {
-                        console.log('收到[DONE]标记，处理完成');
-                        setInputState(true);
-                        showSystemMessage('处理完成', 'success');
-                        continue;
-                    }
-                    
-                    try {
-                        const parsed = JSON.parse(line);
-                        if (parsed && parsed.content) {
-                            // 解码HTML实体
-                            const decodedContent = decodeHtmlEntities(parsed.content);
-                            
-                            // 如果是第一条消息，创建新的消息容器
-                            if (!messageContainer) {
-                                messageContainer = addMessage('', 'assistant');
-                            }
-                            
-                            // 更新消息显示
-                            updateMessageDisplay(messageContainer, decodedContent);
+                    // 处理data行
+                    if (line.startsWith('data:')) {
+                        const data = line.slice(5).trim();
+                        
+                        // 如果是[DONE]标记，结束处理
+                        if (data === '[DONE]') {
+                            console.log('收到[DONE]标记，处理完成');
+                            setInputState(true);
+                            showSystemMessage('处理完成', 'success');
+                            return;
                         }
-                    } catch (e) {
-                        // 忽略[DONE]标记的解析错误
-                        if (line !== '[DONE]') {
-                            console.error('解析消息时出错:', e, '原始行:', line);
+                        
+                        try {
+                            // 创建消息容器（如果还没有）
+                            if (!messageContainer) {
+                                messageContainer = createMessageElement('assistant', '');
+                                elements.chatMessages.appendChild(messageContainer);
+                            }
+
+                            // 尝试解析JSON数据
+                            let content = '';
+                            try {
+                                const jsonData = JSON.parse(data);
+                                content = jsonData.content || '';
+                            } catch (jsonError) {
+                                const contentMatch = data.match(/"content"\s*:\s*"([^]*?)(?<!\\)"/);
+                                if (contentMatch && contentMatch[1]) {
+                                    content = contentMatch[1]
+                                        .replace(/\\"/g, '"')
+                                        .replace(/\\\\/g, '\\')
+                                        .replace(/\\n/g, '\n')
+                                        .replace(/\\r/g, '\r')
+                                        .replace(/\\t/g, '\t')
+                                        .replace(/\\u003C/g, '<')
+                                        .replace(/\\u003E/g, '>')
+                                        .replace(/\\u002F/g, '/')
+                                        .replace(/\\u0022/g, '"')
+                                        .replace(/\\u0027/g, "'")
+                                        .replace(/\\u003D/g, '=');
+                                }
+                            }
+
+                            if (content) {
+                                // 累加消息内容而不是覆盖
+                                currentMessage += content;
+                                console.log('累加的内容:', currentMessage);
+                                updateMessageDisplay(messageContainer, currentMessage);
+                            }
+                        } catch (error) {
+                            console.error('处理消息时出错:', error);
+                            console.error('原始数据:', data);
                         }
                     }
                 }
             }
+
+            setInputState(true);
+            showSystemMessage('处理完成', 'success');
+            
         } catch (error) {
-            console.error('处理请求时出错:', error);
-            showSystemMessage(`处理请求时出错: ${error.message}`, 'error');
-        } finally {
-            // 确保重置输入状态
+            console.error('请求出错:', error);
+            showSystemMessage(error.message, 'error');
+            
+            // 如果还有重试次数，则重试
+            if (retryCount > 0) {
+                console.log(`还剩 ${retryCount} 次重试机会`);
+                showSystemMessage('正在重试...', 'warning');
+                return askQuestionStreamPost(question, retryCount - 1);
+            }
+            
             setInputState(true);
         }
     }
 
-    // HTML实体解码函数
-    function decodeHtmlEntities(text) {
-        const textarea = document.createElement('textarea');
-        textarea.innerHTML = text
-            .replace(/&quot;/g, '"')
-            .replace(/&lt;/g, '<')
-            .replace(/&gt;/g, '>')
-            .replace(/&amp;/g, '&')
-            .replace(/&#39;/g, "'")
-            .replace(/&#47;/g, "/");
-        return textarea.value;
+    // 生成会话ID
+    function generateSessionId() {
+        return 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+    }
+
+    // 清除对话历史
+    async function clearHistory() {
+        try {
+            await fetch('/chat/clear', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ 
+                    sessionId: sessionId
+                })
+            });
+            
+            // 清空消息显示区域
+            elements.chatMessages.innerHTML = '';
+            showSystemMessage('对话历史已清除', 'success');
+            setTimeout(() => {
+                showSystemMessage('', '');
+            }, 2000);
+        } catch (error) {
+            console.error('清除历史记录时出错:', error);
+            showSystemMessage('清除历史记录失败', 'error');
+            setTimeout(() => {
+                showSystemMessage('', '');
+            }, 2000);
+        }
     }
 
     // 处理表单提交
@@ -402,8 +512,14 @@ document.addEventListener('DOMContentLoaded', () => {
         contentDiv.className = 'message-content';
         messageDiv.appendChild(contentDiv);
         
-        // 所有消息都使用Markdown渲染
+        // 用户消息使用 pre 标签保留格式，AI消息使用 Markdown 渲染
+        if (type === 'user') {
+            contentDiv.style.whiteSpace = 'pre-wrap';  // 保留空格和换行
+            contentDiv.style.wordBreak = 'break-word'; // 确保长文本会自动换行
+            contentDiv.textContent = content;
+        } else {
         updateMessageDisplay(messageDiv, content);
+        }
         
         elements.chatMessages.appendChild(messageDiv);
         scrollToBottom();
@@ -495,14 +611,15 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // HTML 转义（仅用于错误消息）
+    // HTML 转义函数（用于所有需要转义的内容）
     function escapeHtml(unsafe) {
         return unsafe
             .replace(/&/g, "&amp;")
             .replace(/</g, "&lt;")
             .replace(/>/g, "&gt;")
             .replace(/"/g, "&quot;")
-            .replace(/'/g, "&#039;");
+            .replace(/'/g, "&#039;")
+            .replace(/`/g, "&#96;"); // 转义反引号
     }
 
     // 显示系统消息
@@ -617,19 +734,19 @@ document.addEventListener('DOMContentLoaded', () => {
         const resources = [
             {
                 type: 'script',
-                primary: 'https://cdnjs.cloudflare.com/ajax/libs/marked/4.3.0/marked.min.js',
+                primary: '/chat/js/marked.min.js',
                 fallback: 'https://cdn.jsdelivr.net/npm/marked@4.3.0/marked.min.js',
                 id: 'marked-js'
             },
             {
                 type: 'style',
-                primary: 'https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/styles/github-dark.min.css',
+                primary: '/chat/css/github-dark.min.css',
                 fallback: 'https://cdn.jsdelivr.net/npm/highlight.js@11.7.0/styles/github-dark.css',
                 id: 'hljs-css'
             },
             {
                 type: 'script',
-                primary: 'https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/highlight.min.js',
+                primary: '/chat/js/highlight.min.js',
                 fallback: 'https://cdn.jsdelivr.net/npm/highlight.js@11.7.0/highlight.min.js',
                 id: 'hljs-js'
             }

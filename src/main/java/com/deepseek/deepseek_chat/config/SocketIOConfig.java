@@ -8,7 +8,7 @@ import org.springframework.context.annotation.Configuration;
 public class SocketIOConfig {
 
 	@Bean
-	public SocketIOServer socketIOServer() {
+	protected SocketIOServer socketIOServer() {
 		com.corundumstudio.socketio.Configuration config = new com.corundumstudio.socketio.Configuration();
 		config.setHostname("localhost");
 		config.setPort(8081); // 使用 8081 端口避免与 Spring Boot 冲突
