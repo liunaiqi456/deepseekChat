@@ -64,54 +64,54 @@ public class ChatService {
         int currentRetry = 0;
         
         while (currentRetry < maxRetries) {
-            try {
-                // 添加用户新问题到历史记录
-                Message userMessage = Message.builder()
-                        .role(Role.USER.getValue())
-                        .content(question)
+        try {
+            // 添加用户新问题到历史记录
+            Message userMessage = Message.builder()
+                    .role(Role.USER.getValue())
+                    .content(question)
+                    .build();
+            
+            // 创建新的消息列表，包含历史记录和新消息
+            List<Message> messages = new ArrayList<>();
+            
+            // 添加系统消息（如果历史记录为空）
+            if (history.isEmpty()) {
+                Message systemMessage = Message.builder()
+                        .role(Role.SYSTEM.getValue())
+                        .content(SYSTEM_PROMPT)
                         .build();
-                
-                // 创建新的消息列表，包含历史记录和新消息
-                List<Message> messages = new ArrayList<>();
-                
-                // 添加系统消息（如果历史记录为空）
-                if (history.isEmpty()) {
-                    Message systemMessage = Message.builder()
-                            .role(Role.SYSTEM.getValue())
-                            .content(SYSTEM_PROMPT)
-                            .build();
-                    messages.add(systemMessage);
-                    history.add(systemMessage);
-                }
-                
-                // 添加历史记录
-                messages.addAll(history);
-                // 添加新的用户消息
-                messages.add(userMessage);
-                
-                // 构建请求参数
-                GenerationParam param = GenerationParam.builder()
-                        .apiKey(apiKey)
+                messages.add(systemMessage);
+                history.add(systemMessage);
+            }
+            
+            // 添加历史记录
+            messages.addAll(history);
+            // 添加新的用户消息
+            messages.add(userMessage);
+            
+            // 构建请求参数
+            GenerationParam param = GenerationParam.builder()
+                    .apiKey(apiKey)
                         .model("deepseek-v3")
-                        .messages(messages)
-                        .resultFormat(GenerationParam.ResultFormat.MESSAGE)
+                    .messages(messages)
+                    .resultFormat(GenerationParam.ResultFormat.MESSAGE)
                         .temperature(0.3f)
-                        .build();
-                
-                // 调用API
-                GenerationResult result = generation.call(param);
-                
-                // 获取AI回复
-                String response = result.getOutput().getChoices().get(0).getMessage().getContent();
-                
-                // 将用户消息和AI回复添加到历史记录
-                history.add(userMessage);
-                Message assistantMessage = Message.builder()
-                        .role(Role.ASSISTANT.getValue())
-                        .content(response)
-                        .build();
-                history.add(assistantMessage);
-                
+                    .build();
+            
+            // 调用API
+            GenerationResult result = generation.call(param);
+            
+            // 获取AI回复
+            String response = result.getOutput().getChoices().get(0).getMessage().getContent();
+            
+            // 将用户消息和AI回复添加到历史记录
+            history.add(userMessage);
+            Message assistantMessage = Message.builder()
+                    .role(Role.ASSISTANT.getValue())
+                    .content(response)
+                    .build();
+            history.add(assistantMessage);
+            
                 return response;
                 
             } catch (ApiException e) {

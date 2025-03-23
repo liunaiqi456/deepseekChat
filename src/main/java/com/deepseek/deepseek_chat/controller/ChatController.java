@@ -107,13 +107,13 @@ public class ChatController {
                             emitter.send(SseEmitter.event()
                                 .data(mapper.writeValueAsString(errorJson))
                                 .name("error"));
-                            emitter.complete();
+            emitter.complete();
                         } catch (Exception e) {
                             logger.error("发送错误消息时出错", e);
                         }
                     }
                 });
-            } catch (Exception e) {
+        } catch (Exception e) {
                 logger.error("处理请求时出错", e);
                 try {
                     ObjectMapper mapper = new ObjectMapper();
@@ -123,7 +123,7 @@ public class ChatController {
                     emitter.send(SseEmitter.event()
                         .data(mapper.writeValueAsString(errorJson))
                         .name("error"));
-                    emitter.complete();
+                emitter.complete();
                 } catch (Exception ex) {
                     logger.error("发送错误消息时出错", ex);
                 }
@@ -140,7 +140,7 @@ public class ChatController {
             logger.error("SSE连接出错", ex);
             emitter.complete();
         });
-
+        
         return emitter;
     }
     

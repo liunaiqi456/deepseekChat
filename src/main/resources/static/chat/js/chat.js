@@ -153,7 +153,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 .replace(/\\u000A/g, '\n')   // 换行
                 .replace(/\\u000D/g, '\r')   // 回车
                 .replace(/\\u0009/g, '\t')   // 制表符
-                .replace(/\\\\/g, '\\')      // 反斜杠
                 .replace(/\\n/g, '\n');      // 换行符
 
             // 调试日志：显示转换后的内容
@@ -162,36 +161,122 @@ document.addEventListener('DOMContentLoaded', () => {
             // 使用marked渲染Markdown
             let renderedContent = decodedContent;
             if (typeof marked !== 'undefined') {
-                // 配置marked
-                marked.setOptions({
-                    sanitize: false,
-                    breaks: true,
-                    langPrefix: 'hljs language-',
-                    highlight: function(code, lang) {
-                        if (typeof hljs !== 'undefined') {
-                            try {
-                                if (lang && hljs.getLanguage(lang)) {
-                                    return hljs.highlight(code, { language: lang }).value;
-                                }
-                                return hljs.highlightAuto(code).value;
-                            } catch (e) {
-                                console.error('代码高亮出错:', e);
-                                return code;
+                // 配置marked以保护数学公式
+                const mathExpressions = [];
+                let mathCount = 0;
+
+                // 保存数学公式
+                renderedContent = renderedContent.replace(/(\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\)|\\begin\{.*?\}[\s\S]*?\\end\{.*?\})/g, (match) => {
+                    const placeholder = `MATH_PLACEHOLDER_${mathCount}`;
+                    mathExpressions[mathCount] = match;
+                    mathCount++;
+                    return placeholder;
+                });
+
+                // 预处理Markdown内容
+                renderedContent = renderedContent
+                    // 处理 "---" 为换行
+                    .replace(/\s*---\s*/g, '\n\n')
+                    // 处理以 "- " 开头的行为列表项，确保前后有适当的空行
+                    .replace(/^-\s+([^\n]+)/gm, function(match, text) {
+                        // 如果文本包含 " - "，将其分割成列表项和标题
+                        if (text.includes(' - ')) {
+                            const parts = text.split(' - ');
+                            return `- ${parts[0].trim()}\n\n### ${parts.slice(1).join(' - ').trim()}\n`;
+                        }
+                        return `- ${text.trim()}`;
+                    })
+                    // 处理数字列表
+                    .replace(/^(\d+)\.\s*([^\n]+)/gm, function(match, number, text) {
+                        // 如果文本包含 " - "，将其分割成列表项和标题
+                        if (text.includes(' - ')) {
+                            const parts = text.split(' - ');
+                            return `${number}. ${parts[0].trim()}\n\n### ${parts.slice(1).join(' - ').trim()}\n`;
+                        }
+                        return `${number}. ${text.trim()}`;
+                    })
+                    // 处理标题：确保#后有空格，前后有换行
+                    .replace(/^(#{1,6})\s*([^\n]+?)(?:\s*#*\s*)$/gm, function(match, hashes, text) {
+                        // 移除文本中的#号和多余空格
+                        text = text.replace(/#+\s*$/, '').trim();
+                        return `\n${hashes} ${text}\n`;
+                    })
+                    // 处理行内的标题（不在行首的标题）
+                    .replace(/([^\n])(#{1,6})\s+([^\n]+?)(?:\s*#*\s*)(?=\n|$)/g, function(match, prev, hashes, text) {
+                        // 移除文本中的#号和多余空格
+                        text = text.replace(/#+\s*$/, '').trim();
+                        return `${prev}\n${hashes} ${text}\n`;
+                    })
+                    // 处理列表项：确保前后有适当的空行和缩进
+                    .replace(/^([*-])\s*([^\n]+)/gm, function(match, marker, text) {
+                        // 处理列表项中的标题
+                        if (text.match(/^#{1,6}\s/)) {
+                            // 如果列表项以#开头，将其转换为标题
+                            const titleMatch = text.match(/^(#{1,6})\s+(.+)$/);
+                            if (titleMatch) {
+                                return `${marker} ${titleMatch[2]}`;
                             }
                         }
-                        return code;
+                        return `${marker} ${text}`;
+                    })
+                    // 确保列表项前有空行
+                    .replace(/([^\n])\n([*-])/g, '$1\n\n$2')
+                    // 删除多余的空行，但保留必要的空行
+                    .replace(/\n{3,}/g, '\n\n');
+
+                // 配置marked
+                const renderer = new marked.Renderer();
+                
+                // 自定义标题渲染
+                renderer.heading = function(text, level) {
+                    // 移除文本中可能存在的#号
+                    text = text.replace(/^#+\s*|#+\s*$/g, '').trim();
+                    return `<h${level}>${text}</h${level}>\n`;
+                };
+                
+                // 自定义列表项渲染
+                renderer.listitem = function(text) {
+                    // 如果列表项包含标题，先处理标题
+                    if (text.match(/^#{1,6}\s/)) {
+                        const titleMatch = text.match(/^(#{1,6})\s+(.+)$/);
+                        if (titleMatch) {
+                            const level = titleMatch[1].length;
+                            text = titleMatch[2];
+                            return `<li><h${level}>${text}</h${level}></li>\n`;
+                        }
                     }
+                    return `<li>${text}</li>\n`;
+                };
+                
+                // 自定义列表渲染
+                renderer.list = function(body, ordered, start) {
+                    const type = ordered ? 'ol' : 'ul';
+                    const startAttr = ordered && start !== 1 ? ` start="${start}"` : '';
+                    return `<${type}${startAttr}>\n${body}</${type}>\n`;
+                };
+
+                // 配置marked选项
+                marked.setOptions({
+                    gfm: true,                    // 启用GitHub风格的Markdown
+                    breaks: true,                 // 允许回车换行
+                    pedantic: false,              // 不要过于严格
+                    sanitize: false,              // 允许原始内容
+                    smartLists: true,             // 优化列表输出
+                    smartypants: false,           // 禁用智能标点转换
+                    xhtml: true,                  // 生成与XML兼容的标签
+                    headerIds: false,             // 禁用标题ID生成
+                    mangle: false,                // 不转义标题中的特殊字符
+                    renderer: renderer            // 使用自定义渲染器
                 });
                 
-                // 处理代码块
-                if (decodedContent.includes('```')) {
-                    // 确保代码块前后有空行
-                    renderedContent = decodedContent
-                        .replace(/```(\w+)?\n/g, '\n```$1\n')
-                        .replace(/\n```/g, '\n```\n');
-                }
-                
+                // 渲染Markdown
                 renderedContent = marked.parse(renderedContent);
+
+                // 恢复数学公式
+                renderedContent = renderedContent.replace(/MATH_PLACEHOLDER_(\d+)/g, (match, index) => {
+                    return mathExpressions[parseInt(index)];
+                });
+
                 // 调试日志：显示Markdown渲染后的内容
                 console.log('Markdown渲染后的内容:', renderedContent);
             }
@@ -206,6 +291,22 @@ document.addEventListener('DOMContentLoaded', () => {
                     contentDiv.querySelectorAll('pre code').forEach((block) => {
                         hljs.highlightBlock(block);
                     });
+                }
+
+                // 应用MathJax渲染
+                if (typeof MathJax !== 'undefined' && MathJax.typesetPromise) {
+                    try {
+                        MathJax.typesetPromise([contentDiv]).then(() => {
+                            console.log('MathJax渲染完成');
+                            scrollToBottom();
+                        }).catch((err) => {
+                            console.error('MathJax渲染出错:', err);
+                        });
+                    } catch (err) {
+                        console.error('MathJax执行出错:', err);
+                    }
+                } else {
+                    console.warn('MathJax未正确加载');
                 }
             }
             
@@ -298,16 +399,16 @@ document.addEventListener('DOMContentLoaded', () => {
                     // 处理data行
                     if (line.startsWith('data:')) {
                         const data = line.slice(5).trim();
-                        
-                        // 如果是[DONE]标记，结束处理
+                    
+                    // 如果是[DONE]标记，结束处理
                         if (data === '[DONE]') {
-                            console.log('收到[DONE]标记，处理完成');
-                            setInputState(true);
+                        console.log('收到[DONE]标记，处理完成');
+                        setInputState(true);
                             showSystemMessage('处理完成', 'success');
                             return;
-                        }
-                        
-                        try {
+                    }
+                    
+                    try {
                             // 创建消息容器（如果还没有）
                             if (!messageContainer) {
                                 messageContainer = createMessageElement('assistant', '');
@@ -489,8 +590,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function createMessageElement(sender, content, isUser = false) {
         const div = document.createElement('div');
         div.className = `message ${isUser ? 'user-message' : 'ai-message'}`;
-        div.innerHTML = `
-            <div class="message-sender">${sender}</div>
+        div.innerHTML = `            <div class="message-sender">${sender}</div>
             <div class="message-content">${content}</div>
         `;
         return div;
@@ -749,31 +849,53 @@ document.addEventListener('DOMContentLoaded', () => {
                 primary: '/chat/js/highlight.min.js',
                 fallback: 'https://cdn.jsdelivr.net/npm/highlight.js@11.7.0/highlight.min.js',
                 id: 'hljs-js'
+            },
+            {
+                type: 'script',
+                primary: '/vendor/mathjax/es5/tex-chtml.js',
+                fallback: 'https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js',
+                id: 'mathjax-js',
+                async: true
             }
         ];
 
         try {
+            // 首先配置MathJax
+            window.MathJax = {
+                tex: {
+                    inlineMath: [['$', '$'], ['\\(', '\\)']],
+                    displayMath: [['$$', '$$'], ['\\[', '\\]']],
+                    packages: {'[+]': ['ams', 'noerrors']},
+                    tags: 'ams',
+                    processEscapes: true,
+                    processEnvironments: true,
+                    processRefs: true,
+                    macros: {
+                        bmatrix: ["\\begin{bmatrix}#1\\end{bmatrix}", 1],
+                        pmatrix: ["\\begin{pmatrix}#1\\end{pmatrix}", 1]
+                    }
+                },
+                options: {
+                    skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre'],
+                    enableMenu: false
+                },
+                startup: {
+                    pageReady: () => {
+                        console.log('MathJax页面准备就绪');
+                        return Promise.resolve();
+                    }
+                },
+                loader: {
+                    load: ['[tex]/ams', '[tex]/noerrors']
+                }
+            };
+
+            // 然后加载资源
             for (const resource of resources) {
                 await loadResource(resource);
             }
 
-            // 配置marked选项
-            if (typeof marked !== 'undefined' && typeof hljs !== 'undefined') {
-                marked.setOptions({
-                    highlight: function(code, lang) {
-                        if (lang && hljs.getLanguage(lang)) {
-                            return hljs.highlight(code, { language: lang }).value;
-                        }
-                        return hljs.highlightAuto(code).value;
-                    },
-                    breaks: true,
-                    gfm: true,
-                    headerIds: true,
-                    mangle: false,
-                    sanitize: false
-                });
-                console.log('Markdown和代码高亮功能已加载');
-            }
+            console.log('所有资源加载完成');
         } catch (error) {
             console.error('加载外部资源失败:', error);
             showSystemMessage('部分功能可能不可用', 'warning');
@@ -823,3 +945,4 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 });
+
