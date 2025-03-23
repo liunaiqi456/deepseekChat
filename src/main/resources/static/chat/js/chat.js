@@ -1,22 +1,4 @@
 document.addEventListener('DOMContentLoaded', () => {
-    // 使用事件委托处理所有点击事件
-    document.addEventListener('click', handleGlobalClick);
-    
-    // 获取必要的DOM元素
-    const elements = {
-        messageInput: document.getElementById('message-input'),
-        sendButton: document.getElementById('send-button'),
-        chatMessages: document.getElementById('chat-messages'),
-        chatForm: document.getElementById('chat-form'),
-        sidebar: document.querySelector('.sidebar'),
-        sidebarToggle: document.querySelector('.sidebar-toggle'),
-        sidebarBackdrop: document.querySelector('.sidebar-backdrop'),
-        statusBar: document.querySelector('.status-bar')
-    };
-
-    // 初始化
-    initializeChat();
-
     // 全局点击事件处理
     function handleGlobalClick(event) {
         const target = event.target;
@@ -37,21 +19,40 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    // 使用事件委托处理所有点击事件
+    document.addEventListener('click', handleGlobalClick);
+    
+    // 获取必要的DOM元素
+    const elements = {
+        messageInput: document.getElementById('message-input'),
+        sendButton: document.getElementById('send-button'),
+        chatMessages: document.getElementById('chat-messages'),
+        chatForm: document.getElementById('chat-form'),
+        sidebar: document.querySelector('.sidebar'),
+        sidebarToggle: document.querySelector('.sidebar-toggle'),
+        sidebarBackdrop: document.querySelector('.sidebar-backdrop'),
+        statusBar: document.querySelector('.status-bar')
+    };
+
+    // 初始化
+    initializeChat();
+
     // 初始化聊天功能
-    function initializeChat() {
+    async function initializeChat() {
+        // 初始禁用输入框
+        setInputState(false);
+        showSystemMessage('正在加载必要组件...', 'info');
+        
+        try {
+            // 加载外部资源
+            await loadExternalResources();
+            
         // 自动聚焦输入框
         focusInput();
 
         // 设置输入框事件监听
         elements.messageInput.addEventListener('input', handleInput);
         elements.messageInput.addEventListener('keydown', handleKeyPress);
-        
-        // 移除自动重新聚焦的行为
-        // elements.messageInput.addEventListener('blur', () => {
-        //     if (!window.matchMedia('(max-width: 768px)').matches) {
-        //         setTimeout(focusInput, 100);
-        //     }
-        // });
 
         // 设置表单提交事件
         elements.chatForm.addEventListener('submit', handleSubmit);
@@ -62,8 +63,13 @@ document.addEventListener('DOMContentLoaded', () => {
         // 初始化 Socket.IO
         initializeSocketIO();
 
-        // 加载外部资源
-        loadExternalResources();
+            // 所有初始化完成后启用输入框
+            setInputState(true);
+            showSystemMessage('准备就绪', 'success');
+        } catch (error) {
+            console.error('初始化失败:', error);
+            showSystemMessage('初始化失败，请刷新页面重试', 'error');
+        }
     }
 
     // 聚焦输入框
@@ -136,177 +142,53 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // 处理消息的显示
-    function updateMessageDisplay(messageContainer, content) {
+    function updateMessageDisplay(messageElement, content) {
         try {
-            // 调试日志：显示原始内容
-            console.log('原始内容:', content);
-
-            // 将Unicode转义序列转换回实际字符
-            const decodedContent = content
-                .replace(/\\u003C/g, '<')    // <
-                .replace(/\\u003E/g, '>')    // >
-                .replace(/\\u002F/g, '/')    // /
-                .replace(/\\u0022/g, '"')    // "
-                .replace(/\\u0027/g, "'")    // '
-                .replace(/\\u003D/g, '=')    // =
-                .replace(/\\u0020/g, ' ')    // 空格
-                .replace(/\\u000A/g, '\n')   // 换行
-                .replace(/\\u000D/g, '\r')   // 回车
-                .replace(/\\u0009/g, '\t')   // 制表符
-                .replace(/\\n/g, '\n');      // 换行符
-
-            // 调试日志：显示转换后的内容
-            console.log('Unicode转换后的内容:', decodedContent);
-            
-            // 使用marked渲染Markdown
-            let renderedContent = decodedContent;
-            if (typeof marked !== 'undefined') {
-                // 配置marked以保护数学公式
+            // 检查marked是否可用
+            if (typeof window.marked === 'undefined') {
+                console.warn('marked库未加载，使用基本渲染');
+                // 基本渲染：保留HTML标签和数学公式
+                const basicRenderedContent = content
+                    .replace(/\n/g, '<br>')  // 换行转换为<br>
+                    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')  // 粗体
+                    .replace(/\*(.*?)\*/g, '<em>$1</em>')  // 斜体
+                    .replace(/`([^`]+)`/g, '<code>$1</code>')  // 行内代码
+                    .replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>')  // 代码块
+                    .replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2">$1</a>')  // 链接
+                    .replace(/^\s*[-*+]\s+(.+)$/gm, '<li>$1</li>')  // 无序列表
+                    .replace(/^\s*\d+\.\s+(.+)$/gm, '<li>$1</li>')  // 有序列表
+                    .replace(/(<li>.*<\/li>)/s, '<ul>$1</ul>')  // 包装列表
+                    .replace(/^\s*>\s*(.+)$/gm, '<blockquote>$1</blockquote>')  // 引用
+                    .replace(/^\s*#{1,6}\s+(.+)$/gm, (match, text) => {
+                        const level = match.match(/^#+/)[0].length;
+                        return `<h${level}>${text}</h${level}>`;
+                    });  // 标题
+                
+                updateMessageContent(messageElement, basicRenderedContent);
+            } else {
+                // 使用marked渲染Markdown，但保护数学公式
                 const mathExpressions = [];
-                let mathCount = 0;
-
-                // 保存数学公式
-                renderedContent = renderedContent.replace(/(\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\)|\\begin\{.*?\}[\s\S]*?\\end\{.*?\})/g, (match) => {
-                    const placeholder = `MATH_PLACEHOLDER_${mathCount}`;
-                    mathExpressions[mathCount] = match;
-                    mathCount++;
-                    return placeholder;
-                });
-
-                // 预处理Markdown内容
-                renderedContent = renderedContent
-                    // 处理 "---" 为换行
-                    .replace(/\s*---\s*/g, '\n\n')
-                    // 处理以 "- " 开头的行为列表项，确保前后有适当的空行
-                    .replace(/^-\s+([^\n]+)/gm, function(match, text) {
-                        // 如果文本包含 " - "，将其分割成列表项和标题
-                        if (text.includes(' - ')) {
-                            const parts = text.split(' - ');
-                            return `- ${parts[0].trim()}\n\n### ${parts.slice(1).join(' - ').trim()}\n`;
-                        }
-                        return `- ${text.trim()}`;
-                    })
-                    // 处理数字列表
-                    .replace(/^(\d+)\.\s*([^\n]+)/gm, function(match, number, text) {
-                        // 如果文本包含 " - "，将其分割成列表项和标题
-                        if (text.includes(' - ')) {
-                            const parts = text.split(' - ');
-                            return `${number}. ${parts[0].trim()}\n\n### ${parts.slice(1).join(' - ').trim()}\n`;
-                        }
-                        return `${number}. ${text.trim()}`;
-                    })
-                    // 处理标题：确保#后有空格，前后有换行
-                    .replace(/^(#{1,6})\s*([^\n]+?)(?:\s*#*\s*)$/gm, function(match, hashes, text) {
-                        // 移除文本中的#号和多余空格
-                        text = text.replace(/#+\s*$/, '').trim();
-                        return `\n${hashes} ${text}\n`;
-                    })
-                    // 处理行内的标题（不在行首的标题）
-                    .replace(/([^\n])(#{1,6})\s+([^\n]+?)(?:\s*#*\s*)(?=\n|$)/g, function(match, prev, hashes, text) {
-                        // 移除文本中的#号和多余空格
-                        text = text.replace(/#+\s*$/, '').trim();
-                        return `${prev}\n${hashes} ${text}\n`;
-                    })
-                    // 处理列表项：确保前后有适当的空行和缩进
-                    .replace(/^([*-])\s*([^\n]+)/gm, function(match, marker, text) {
-                        // 处理列表项中的标题
-                        if (text.match(/^#{1,6}\s/)) {
-                            // 如果列表项以#开头，将其转换为标题
-                            const titleMatch = text.match(/^(#{1,6})\s+(.+)$/);
-                            if (titleMatch) {
-                                return `${marker} ${titleMatch[2]}`;
-                            }
-                        }
-                        return `${marker} ${text}`;
-                    })
-                    // 确保列表项前有空行
-                    .replace(/([^\n])\n([*-])/g, '$1\n\n$2')
-                    // 删除多余的空行，但保留必要的空行
-                    .replace(/\n{3,}/g, '\n\n');
-
-                // 配置marked
-                const renderer = new marked.Renderer();
+                let mathIndex = 0;
                 
-                // 自定义标题渲染
-                renderer.heading = function(text, level) {
-                    // 移除文本中可能存在的#号
-                    text = text.replace(/^#+\s*|#+\s*$/g, '').trim();
-                    return `<h${level}>${text}</h${level}>\n`;
-                };
-                
-                // 自定义列表项渲染
-                renderer.listitem = function(text) {
-                    // 如果列表项包含标题，先处理标题
-                    if (text.match(/^#{1,6}\s/)) {
-                        const titleMatch = text.match(/^(#{1,6})\s+(.+)$/);
-                        if (titleMatch) {
-                            const level = titleMatch[1].length;
-                            text = titleMatch[2];
-                            return `<li><h${level}>${text}</h${level}></li>\n`;
-                        }
-                    }
-                    return `<li>${text}</li>\n`;
-                };
-                
-                // 自定义列表渲染
-                renderer.list = function(body, ordered, start) {
-                    const type = ordered ? 'ol' : 'ul';
-                    const startAttr = ordered && start !== 1 ? ` start="${start}"` : '';
-                    return `<${type}${startAttr}>\n${body}</${type}>\n`;
-                };
-
-                // 配置marked选项
-                marked.setOptions({
-                    gfm: true,                    // 启用GitHub风格的Markdown
-                    breaks: true,                 // 允许回车换行
-                    pedantic: false,              // 不要过于严格
-                    sanitize: false,              // 允许原始内容
-                    smartLists: true,             // 优化列表输出
-                    smartypants: false,           // 禁用智能标点转换
-                    xhtml: true,                  // 生成与XML兼容的标签
-                    headerIds: false,             // 禁用标题ID生成
-                    mangle: false,                // 不转义标题中的特殊字符
-                    renderer: renderer            // 使用自定义渲染器
+                // 临时替换数学公式
+                const contentWithPlaceholders = content.replace(/(\$\$[\s\S]*?\$\$|\$[^\$\n]+\$|\\begin\{[^}]+\}[\s\S]*?\\end\{[^}]+\}|\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\))/g, (match) => {
+                    mathExpressions.push(match);
+                    return `%%MATH_EXPR_${mathIndex++}%%`;
                 });
                 
                 // 渲染Markdown
-                renderedContent = marked.parse(renderedContent);
-
-                // 恢复数学公式
-                renderedContent = renderedContent.replace(/MATH_PLACEHOLDER_(\d+)/g, (match, index) => {
-                    return mathExpressions[parseInt(index)];
-                });
-
-                // 调试日志：显示Markdown渲染后的内容
-                console.log('Markdown渲染后的内容:', renderedContent);
-            }
-            
-            // 更新消息容器内容
-            const contentDiv = messageContainer.querySelector('.message-content');
-            if (contentDiv) {
-                contentDiv.innerHTML = renderedContent;
+                let htmlContent = window.marked.parse(contentWithPlaceholders);
                 
-                // 应用代码高亮
-                if (typeof hljs !== 'undefined') {
-                    contentDiv.querySelectorAll('pre code').forEach((block) => {
-                        hljs.highlightBlock(block);
+                // 恢复数学公式
+                htmlContent = htmlContent.replace(/%%MATH_EXPR_(\d+)%%/g, (_, index) => mathExpressions[index]);
+                
+                updateMessageContent(messageElement, htmlContent);
+                
+                // 触发MathJax重新渲染
+                if (window.MathJax && window.MathJax.typesetPromise) {
+                    window.MathJax.typesetPromise([messageElement]).catch((err) => {
+                        console.error('MathJax渲染错误:', err);
                     });
-                }
-
-                // 应用MathJax渲染
-                if (typeof MathJax !== 'undefined' && MathJax.typesetPromise) {
-                    try {
-                        MathJax.typesetPromise([contentDiv]).then(() => {
-                            console.log('MathJax渲染完成');
-                            scrollToBottom();
-                        }).catch((err) => {
-                            console.error('MathJax渲染出错:', err);
-                        });
-                    } catch (err) {
-                        console.error('MathJax执行出错:', err);
-                    }
-                } else {
-                    console.warn('MathJax未正确加载');
                 }
             }
             
@@ -314,12 +196,75 @@ document.addEventListener('DOMContentLoaded', () => {
             scrollToBottom();
         } catch (error) {
             console.error('更新消息显示时出错:', error);
-            console.error('原始内容:', content);
-            const contentDiv = messageContainer.querySelector('.message-content');
-            if (contentDiv) {
-                contentDiv.textContent = content;
+            // 发生错误时使用纯文本显示
+            updateMessageContent(messageElement, escapeHtml(content));
+        }
+    }
+
+    function preprocessTableContent(content) {
+        const lines = content.split('\n');
+        const result = [];
+        let isInTable = false;
+        let tableLines = [];
+        
+        for (let line of lines) {
+            if (line.includes('|')) {
+                if (!isInTable) {
+                    isInTable = true;
+                }
+                tableLines.push(line);
+            } else {
+                if (isInTable) {
+                    if (tableLines.length >= 2) {
+                        // 处理表格
+                        result.push('');  // 空行
+                        result.push(...formatTableLines(tableLines));
+                        result.push('');  // 空行
+                    } else {
+                        // 不是有效的表格，作为普通文本处理
+                        result.push(...tableLines);
+                    }
+                    isInTable = false;
+                    tableLines = [];
+                }
+                result.push(line);
             }
         }
+        
+        // 处理最后的表格（如果有）
+        if (isInTable && tableLines.length >= 2) {
+            result.push('');
+            result.push(...formatTableLines(tableLines));
+            result.push('');
+        }
+        
+        return result.join('\n');
+    }
+
+    function formatTableLines(lines) {
+        // 确保至少有标题行
+        if (lines.length === 0) return [];
+        
+        // 处理每一行，标准化格式
+        const formattedLines = lines.map(line => {
+            // 移除首尾的|，并分割单元格
+            const cells = line.trim().replace(/^\||\|$/g, '').split('|');
+            
+            // 处理每个单元格
+            const formattedCells = cells.map(cell => cell.trim() || '-');
+            
+            // 重新组合行
+            return `| ${formattedCells.join(' | ')} |`;
+        });
+        
+        // 如果没有分隔行，在第一行后添加
+        if (lines.length === 1 || !lines[1].includes('-')) {
+            const headerCells = formattedLines[0].split('|').length - 2;
+            const separator = `|${' --- |'.repeat(headerCells)}`;
+            formattedLines.splice(1, 0, separator);
+        }
+        
+        return formattedLines;
     }
 
     // 检查文本是否看起来像代码
@@ -341,6 +286,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 生成会话ID
     const sessionId = generateSessionId();
+    
+    // 添加表格缓冲处理
+    let tableBuffer = '';
+    let isCollectingTable = false;
+    let tableStartIndex = -1;
     
     // 发送消息并获取流式响应（POST方式）
     async function askQuestionStreamPost(question, retryCount = 3) {
@@ -379,7 +329,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // 读取流
             while (true) {
                 const { value, done } = await reader.read();
-                
+
                 if (done) {
                     console.log('流读取完成');
                     break;
@@ -389,65 +339,87 @@ document.addEventListener('DOMContentLoaded', () => {
                 const chunk = decoder.decode(value, { stream: true });
                 buffer += chunk;
                 
-                // 按行分割并处理每一行
+                try {
+                    // 按行分割并处理每一行
                 const lines = buffer.split('\n');
-                buffer = lines.pop() || ''; // 保存不完整的最后一行
-                
-                for (const line of lines) {
-                    if (!line.trim()) continue;  // 跳过空行
+                    buffer = lines.pop() || ''; // 保存不完整的最后一行
                     
-                    // 处理data行
-                    if (line.startsWith('data:')) {
-                        const data = line.slice(5).trim();
+                    for (const line of lines) {
+                        if (!line.trim()) continue;  // 跳过空行
+                        
+                        // 处理data行
+                        if (line.startsWith('data:')) {
+                            const data = line.slice(5).trim();
                     
                     // 如果是[DONE]标记，结束处理
-                        if (data === '[DONE]') {
+                            if (data === '[DONE]') {
                         console.log('收到[DONE]标记，处理完成');
-                        setInputState(true);
-                            showSystemMessage('处理完成', 'success');
-                            return;
+                        continue;
                     }
                     
-                    try {
-                            // 创建消息容器（如果还没有）
-                            if (!messageContainer) {
-                                messageContainer = createMessageElement('assistant', '');
-                                elements.chatMessages.appendChild(messageContainer);
-                            }
-
                             // 尝试解析JSON数据
-                            let content = '';
                             try {
                                 const jsonData = JSON.parse(data);
-                                content = jsonData.content || '';
+                                if (jsonData.content !== undefined) {  // 检查content是否存在
+                                    // 创建消息容器（如果还没有）
+                            if (!messageContainer) {
+                                        messageContainer = createMessageElement('assistant', '');
+                                        elements.chatMessages.appendChild(messageContainer);
+                                    }
+                                    // 提取实际内容
+                                    const content = typeof jsonData.content === 'string' 
+                                        ? jsonData.content 
+                                        : JSON.stringify(jsonData.content);
+                                    
+                                    currentMessage += content;
+                                    // 使用原有的updateMessageDisplay函数来保持渲染功能
+                                    updateMessageDisplay(messageContainer, currentMessage);
+                                }
                             } catch (jsonError) {
-                                const contentMatch = data.match(/"content"\s*:\s*"([^]*?)(?<!\\)"/);
+                                console.warn('JSON解析失败，尝试提取content字段');
+                                // 使用正则表达式提取content字段的值
+                                const contentMatch = data.match(/"content"\s*:\s*"([^"]*?)(?<!\\)"/);
                                 if (contentMatch && contentMatch[1]) {
-                                    content = contentMatch[1]
+                                    if (!messageContainer) {
+                                        messageContainer = createMessageElement('assistant', '');
+                                        elements.chatMessages.appendChild(messageContainer);
+                                    }
+                                    const content = contentMatch[1]
                                         .replace(/\\"/g, '"')
                                         .replace(/\\\\/g, '\\')
                                         .replace(/\\n/g, '\n')
                                         .replace(/\\r/g, '\r')
-                                        .replace(/\\t/g, '\t')
-                                        .replace(/\\u003C/g, '<')
-                                        .replace(/\\u003E/g, '>')
-                                        .replace(/\\u002F/g, '/')
-                                        .replace(/\\u0022/g, '"')
-                                        .replace(/\\u0027/g, "'")
-                                        .replace(/\\u003D/g, '=');
+                                        .replace(/\\t/g, '\t');
+                                    
+                                    currentMessage += content;
+                                    updateMessageDisplay(messageContainer, currentMessage);
+                                } else {
+                                    // 如果无法提取content，尝试直接使用data
+                                    if (!messageContainer) {
+                                        messageContainer = createMessageElement('assistant', '');
+                                        elements.chatMessages.appendChild(messageContainer);
+                                    }
+                                    currentMessage += data;
+                                    updateMessageDisplay(messageContainer, currentMessage);
                                 }
                             }
-
-                            if (content) {
-                                // 累加消息内容而不是覆盖
-                                currentMessage += content;
-                                console.log('累加的内容:', currentMessage);
-                                updateMessageDisplay(messageContainer, currentMessage);
+                        } else if (line.includes('event:') || line.includes('id:')) {
+                            // 忽略事件和ID行
+                            continue;
+                        } else {
+                            // 处理其他行
+                            if (!messageContainer) {
+                                messageContainer = createMessageElement('assistant', '');
+                                elements.chatMessages.appendChild(messageContainer);
                             }
-                        } catch (error) {
-                            console.error('处理消息时出错:', error);
-                            console.error('原始数据:', data);
-                        }
+                            currentMessage += line + '\n';
+                            updateMessageDisplay(messageContainer, currentMessage);
+                }
+            }
+        } catch (error) {
+                    console.error('处理消息时出错:', error);
+                    if (messageContainer) {
+                        updateMessageContent(messageContainer, '处理消息时发生错误，请重试。', true);
                     }
                 }
             }
@@ -459,7 +431,6 @@ document.addEventListener('DOMContentLoaded', () => {
             console.error('请求出错:', error);
             showSystemMessage(error.message, 'error');
             
-            // 如果还有重试次数，则重试
             if (retryCount > 0) {
                 console.log(`还剩 ${retryCount} 次重试机会`);
                 showSystemMessage('正在重试...', 'warning');
@@ -568,7 +539,33 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (done) break;
 
                 const chunk = decoder.decode(value, { stream: true });
+                
+                // 处理表格数据
+                if (chunk.includes('|')) {
+                    if (!isCollectingTable) {
+                        // 开始收集表格数据
+                        isCollectingTable = true;
+                        tableStartIndex = responseText.length;
+                        tableBuffer = '';
+                    }
+                    tableBuffer += chunk;
+                    
+                    // 检查表格是否完整
+                    if (isTableComplete(tableBuffer)) {
+                        // 表格数据收集完成，进行渲染
+                        const processedTable = processTableData(tableBuffer);
+                        responseText = responseText.substring(0, tableStartIndex) + processedTable;
+                        isCollectingTable = false;
+                        tableBuffer = '';
+                    }
+                } else {
+                    // 非表格数据直接添加
+                    if (isCollectingTable) {
+                        tableBuffer += chunk;
+                    } else {
                 responseText += chunk;
+                    }
+                }
 
                 // 创建或更新消息
                 if (!messageDiv) {
@@ -616,8 +613,36 @@ document.addEventListener('DOMContentLoaded', () => {
         if (type === 'user') {
             contentDiv.style.whiteSpace = 'pre-wrap';  // 保留空格和换行
             contentDiv.style.wordBreak = 'break-word'; // 确保长文本会自动换行
-            contentDiv.textContent = content;
+            
+            // 处理数学公式
+            const mathExpressions = [];
+            let mathIndex = 0;
+            
+            // 临时替换数学公式
+            const contentWithPlaceholders = content.replace(/(\$\$[\s\S]*?\$\$|\$[^\$\n]+\$|\\begin\{[^}]+\}[\s\S]*?\\end\{[^}]+\}|\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\))/g, (match) => {
+                mathExpressions.push(match);
+                return `%%MATH_EXPR_${mathIndex++}%%`;
+            });
+            
+            // 转义HTML特殊字符，但保留数学公式占位符
+            let processedContent = contentWithPlaceholders
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;");
+            
+            // 恢复数学公式
+            const finalContent = processedContent.replace(/%%MATH_EXPR_(\d+)%%/g, (_, index) => mathExpressions[index]);
+            
+            contentDiv.innerHTML = finalContent;
+            
+            // 触发MathJax渲染
+            if (window.MathJax && window.MathJax.typesetPromise) {
+                window.MathJax.typesetPromise([contentDiv]).catch((err) => {
+                    console.error('MathJax渲染错误:', err);
+                });
+            }
         } else {
+            // AI消息：使用Markdown渲染
         updateMessageDisplay(messageDiv, content);
         }
         
@@ -829,14 +854,95 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    // 初始化marked渲染器
+    function initializeMarkedRenderer() {
+        return new Promise((resolve, reject) => {
+            // 确保marked已加载
+            if (typeof window.marked === 'undefined') {
+                console.warn('等待marked库加载...');
+                setTimeout(() => initializeMarkedRenderer().then(resolve).catch(reject), 100);
+                return;
+            }
+
+            try {
+                // 配置marked选项
+                const renderer = new window.marked.Renderer();
+
+                // 自定义代码块渲染
+                renderer.code = function(code, language) {
+                    const validLanguage = !!(language && hljs.getLanguage(language));
+                    const highlighted = validLanguage ? hljs.highlight(code, { language }).value : code;
+                    return `<pre><code class="hljs ${language || ''}">${highlighted}</code></pre>`;
+                };
+
+                // 自定义表格渲染
+                renderer.table = function(header, body) {
+                    return '<div class="table-container">\n' +
+                           '<table>\n' +
+                           (header ? '<thead>\n' + header + '</thead>\n' : '') +
+                           (body ? '<tbody>\n' + body + '</tbody>\n' : '') +
+                           '</table>\n' +
+                           '</div>\n';
+                };
+
+                renderer.tablerow = function(content) {
+                    return '<tr>\n' + content + '</tr>\n';
+                };
+
+                renderer.tablecell = function(content, flags) {
+                    const type = flags.header ? 'th' : 'td';
+                    const align = flags.align ? ` style="text-align: ${flags.align}"` : '';
+                    return `<${type}${align}>${content || '-'}</${type}>\n`;
+                };
+
+                // 配置marked选项
+                window.marked.setOptions({
+                    renderer: renderer,
+                    gfm: true,
+                    tables: true,
+                    breaks: true,
+                    pedantic: false,
+                    sanitize: false,
+                    smartLists: true,
+                    smartypants: false,
+                    highlight: function(code, language) {
+                        if (language && hljs.getLanguage(language)) {
+                            try {
+                                return hljs.highlight(code, { language }).value;
+                            } catch (err) {
+                                console.error('代码高亮出错:', err);
+                            }
+                        }
+                        return code;
+                    }
+                });
+
+                console.log('marked渲染器初始化完成');
+                resolve();
+            } catch (error) {
+                console.error('初始化marked渲染器时出错:', error);
+                reject(error);
+            }
+        });
+    }
+
     // 加载外部资源的函数
     async function loadExternalResources() {
         const resources = [
             {
                 type: 'script',
                 primary: '/chat/js/marked.min.js',
-                fallback: 'https://cdn.jsdelivr.net/npm/marked@4.3.0/marked.min.js',
-                id: 'marked-js'
+                fallback: 'https://cdn.jsdelivr.net/npm/marked/marked.min.js',
+                id: 'marked-js',
+                onload: async () => {
+                    console.log('marked库加载完成');
+                    try {
+                        await initializeMarkedRenderer();
+                    } catch (error) {
+                        console.error('初始化marked渲染器失败:', error);
+                        throw error;
+                    }
+                }
             },
             {
                 type: 'style',
@@ -860,33 +966,17 @@ document.addEventListener('DOMContentLoaded', () => {
         ];
 
         try {
+            showSystemMessage('正在加载资源...', 'info');
+            
             // 首先配置MathJax
             window.MathJax = {
                 tex: {
                     inlineMath: [['$', '$'], ['\\(', '\\)']],
                     displayMath: [['$$', '$$'], ['\\[', '\\]']],
-                    packages: {'[+]': ['ams', 'noerrors']},
-                    tags: 'ams',
-                    processEscapes: true,
-                    processEnvironments: true,
-                    processRefs: true,
-                    macros: {
-                        bmatrix: ["\\begin{bmatrix}#1\\end{bmatrix}", 1],
-                        pmatrix: ["\\begin{pmatrix}#1\\end{pmatrix}", 1]
-                    }
+                    packages: {'[+]': ['ams', 'noerrors']}
                 },
                 options: {
-                    skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre'],
-                    enableMenu: false
-                },
-                startup: {
-                    pageReady: () => {
-                        console.log('MathJax页面准备就绪');
-                        return Promise.resolve();
-                    }
-                },
-                loader: {
-                    load: ['[tex]/ams', '[tex]/noerrors']
+                    skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre']
                 }
             };
 
@@ -896,9 +986,11 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             console.log('所有资源加载完成');
+            showSystemMessage('资源加载完成', 'success');
         } catch (error) {
             console.error('加载外部资源失败:', error);
             showSystemMessage('部分功能可能不可用', 'warning');
+            throw error;
         }
     }
 
@@ -916,7 +1008,13 @@ document.addEventListener('DOMContentLoaded', () => {
             
             element.id = resource.id;
 
-            element.onload = () => resolve();
+            element.onload = () => {
+                if (resource.onload) {
+                    resource.onload();
+                }
+                resolve();
+            };
+            
             element.onerror = () => {
                 console.warn(`Primary ${resource.type} failed to load, trying fallback...`);
                 if (resource.type === 'script') {
@@ -929,20 +1027,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
             document.head.appendChild(element);
         });
-    }
-
-    // 渲染Markdown内容的函数
-    function renderMarkdown(content) {
-        try {
-            if (typeof marked === 'undefined') {
-                console.error('Marked is not loaded');
-                return content;
-            }
-            return marked.parse(content);
-        } catch (error) {
-            console.error('Error rendering markdown:', error);
-            return content;
-        }
     }
 });
 

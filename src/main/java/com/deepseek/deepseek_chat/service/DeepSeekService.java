@@ -32,7 +32,7 @@ public interface DeepSeekService {
             // 配置请求参数
             GenerationParam param = GenerationParam.builder()
                     .apiKey(System.getenv("DASHSCOPE_API_KEY")) // 确保环境变量已配置
-                    .model("deepseek-v3")  // 选择 DeepSeek 模型
+                    .model("qwq-plus")  // 选择 DeepSeek 模型
                     .messages(Arrays.asList(userMsg))
                     .resultFormat(GenerationParam.ResultFormat.MESSAGE)
                     .build();
