@@ -3,8 +3,8 @@ document.addEventListener('DOMContentLoaded', () => {
     function handleGlobalClick(event) {
         const target = event.target;
 
-        // 处理新对话按钮点击
-        if (target.closest('.btn-primary')) {
+        // 处理新对话按钮点击 - 需要确保这是实际的新对话按钮，而不是发送按钮
+        if (target.closest('.new-chat-btn')) {  // 修改选择器为更具体的类名
             startNewChat();
         }
 
@@ -19,28 +19,29 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-	// 使用事件委托处理所有点击事件
-	document.addEventListener('click', handleGlobalClick);
+    // 使用事件委托处理所有点击事件
+    document.addEventListener('click', handleGlobalClick);
+    
+    // 获取必要的DOM元素
+    const elements = {
+        messageInput: document.getElementById('message-input'),
+        sendButton: document.getElementById('send-button'),
+        chatMessages: document.getElementById('chat-messages'),
+        chatForm: document.getElementById('chat-form'),
+        sidebar: document.querySelector('.sidebar'),
+        sidebarToggle: document.querySelector('.sidebar-toggle'),
+        sidebarBackdrop: document.querySelector('.sidebar-backdrop'),
+        statusBar: document.querySelector('.status-bar')
+    };
 
-	// 获取必要的DOM元素
-	const elements = {
-		messageInput: document.getElementById('message-input'),
-		sendButton: document.getElementById('send-button'),
-		chatMessages: document.getElementById('chat-messages'),
-		chatForm: document.getElementById('chat-form'),
-		sidebar: document.querySelector('.sidebar'),
-		sidebarToggle: document.querySelector('.sidebar-toggle'),
-		sidebarBackdrop: document.querySelector('.sidebar-backdrop'),
-		statusBar: document.querySelector('.status-bar')
-	};
-
-	// 初始化
-	initializeChat();
+    // 初始化
+    initializeChat();
 
     // 初始化聊天功能
 	async function initializeChat() {
-		// 初始禁用输入框
+		// 初始禁用输入框和发送按钮
 		setInputState(false);
+        elements.sendButton.disabled = true; // 确保页面加载时发送按钮是禁用的
 		showSystemMessage('正在加载必要组件...', 'info');
 
 		try {
@@ -52,7 +53,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // 设置输入框事件监听
         elements.messageInput.addEventListener('input', handleInput);
-        elements.messageInput.addEventListener('keydown', handleKeyPress);
 
         // 设置表单提交事件
         elements.chatForm.addEventListener('submit', handleSubmit);
@@ -63,8 +63,9 @@ document.addEventListener('DOMContentLoaded', () => {
         // 初始化 Socket.IO
         initializeSocketIO();
 
-			// 所有初始化完成后启用输入框
+			// 所有初始化完成后启用输入框，但保持发送按钮禁用状态（直到有输入）
 			setInputState(true);
+            elements.sendButton.disabled = true; // 初始状态下输入框是空的，所以发送按钮应该是禁用的
 			showSystemMessage('准备就绪', 'success');
 		} catch (error) {
 			console.error('初始化失败:', error);
@@ -94,51 +95,70 @@ document.addEventListener('DOMContentLoaded', () => {
         input.style.height = 'auto';
         input.style.height = input.scrollHeight + 'px';
         
-        // 更新发送按钮状态
-        elements.sendButton.disabled = !input.value.trim();
+        // 更新发送按钮状态 - 确保消息为空时发送按钮处于禁用状态
+        const isEmpty = !input.value.trim();
+        elements.sendButton.disabled = isEmpty;
     }
 
     // 处理键盘事件
     function handleKeyPress(event) {
-        // 如果按下Enter键且没有按下Shift键和Alt键，则发送消息
+        // 检测是否为移动设备
+        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+        
+        // 如果是移动设备，处理换行
+        if (isMobile) {
+            // 在移动设备上，只处理Enter键事件一次
+            if (event.key === 'Enter') {
+                // 阻止默认行为（提交表单和自动插入换行）
+                event.preventDefault();
+                
+                // 只在keydown事件时插入换行
+                if (event.type === 'keydown') {
+                    insertNewline(event.target);
+                }
+                return;
+            }
+            // 其他按键正常处理
+            return;
+        }
+        
+        // 桌面端处理：按下Enter键且没有按下Shift键和Alt键，则发送消息
         if (event.key === 'Enter' && !event.shiftKey && !event.altKey) {
             event.preventDefault();
+            // 检查消息是否为空
+            const isEmpty = !event.target.value.trim();
+            if (!isEmpty) {
             handleSubmit(event);
+            } else {
+                // 如果消息为空，可以添加提示或振动反馈
+                if (navigator.vibrate) {
+                    navigator.vibrate(100); // 轻微振动提示
+                }
+            }
         }
         // 如果按下Enter键且按下Alt键或Shift键，则插入换行
         else if (event.key === 'Enter' && (event.altKey || event.shiftKey)) {
             event.preventDefault();
-            const input = event.target;
+            insertNewline(event.target);
+        }
+    }
+    
+    // 插入换行的辅助函数
+    function insertNewline(input) {
             const start = input.selectionStart;
             const end = input.selectionEnd;
             const value = input.value;
             const beforeCursor = value.substring(0, start);
             const afterCursor = value.substring(end);
             
-            // 检查光标前后是否已经有换行符
-            const needsLeadingNewline = start > 0 && beforeCursor.charAt(beforeCursor.length - 1) !== '\n';
-            const needsTrailingNewline = end < value.length && afterCursor.charAt(0) !== '\n';
-            
-            // 根据上下文添加适当的换行符
-            let newValue = beforeCursor;
-            if (needsLeadingNewline) {
-                newValue += '\n';
-            }
-            if (needsTrailingNewline) {
-                newValue += '\n';
-            }
-            newValue += afterCursor;
-            
-            // 更新输入框的值
-            input.value = newValue;
+        // 插入单个换行符，而不是两个
+        input.value = beforeCursor + '\n' + afterCursor;
             
             // 将光标移动到新的位置
-            const newPosition = start + (needsLeadingNewline ? 1 : 0);
-            input.selectionStart = input.selectionEnd = newPosition;
+        input.selectionStart = input.selectionEnd = start + 1;
             
             // 触发input事件以调整文本框高度
             input.dispatchEvent(new Event('input'));
-        }
     }
 
     // 处理消息的显示
@@ -295,7 +315,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // 发送消息并获取流式响应（POST方式）
 	async function askQuestionStreamPost(question, retryCount = 3) {
         try {
-            // 显示用户的问题
+            // 显示用户的问题（添加到当前对话中，不清空已有内容）
             addMessage(question, 'user');
             
             // 禁用输入，表示正在处理
@@ -434,6 +454,7 @@ document.addEventListener('DOMContentLoaded', () => {
 			if (retryCount > 0) {
 				console.log(`还剩 ${retryCount} 次重试机会`);
 				showSystemMessage('正在重试...', 'warning');
+				// 注意：重试时也不应清空已有对话
 				return askQuestionStreamPost(question, retryCount - 1);
 			}
 
@@ -448,6 +469,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 清除对话历史
     async function clearHistory() {
+        // 添加确认提示，防止意外清空对话
+        if (elements.chatMessages.children.length > 0) {
+            const confirmClear = window.confirm('确定要清除所有对话历史吗？');
+            if (!confirmClear) {
+                return; // 用户取消，不清空对话
+            }
+        }
+        
         try {
             await fetch('/chat/clear', {
                 method: 'POST',
@@ -479,7 +508,17 @@ document.addEventListener('DOMContentLoaded', () => {
         event.preventDefault();
         const question = elements.messageInput.value.trim();
         
-        if (question) {
+        // 检查消息是否为空
+        if (!question) {
+            // 消息为空，不提交
+            console.log('消息为空，不提交');
+            // 针对移动设备，添加振动反馈（如果支持）
+            if (navigator.vibrate) {
+                navigator.vibrate(100); // 轻微振动100毫秒
+            }
+            return; // 直接返回，不执行后续代码
+        }
+        
             // 立即清空并重置输入框
             elements.messageInput.value = '';
             elements.messageInput.style.height = 'auto';
@@ -489,12 +528,12 @@ document.addEventListener('DOMContentLoaded', () => {
             setInputState(false);
             
             try {
+            // 注意：这里不应该清空已有对话内容
                 await askQuestionStreamPost(question);
             } catch (error) {
                 console.error('发送消息时出错:', error);
                 showSystemMessage('发送消息失败，请重试', 'error');
                 setInputState(true);
-            }
         }
     }
 
@@ -509,15 +548,19 @@ document.addEventListener('DOMContentLoaded', () => {
         adjustTextareaHeight(this);
     });
 
-    // 监听输入框按键事件
-    elements.messageInput.addEventListener('keydown', function(e) {
-        handleKeyPress(e);
-    });
-
     // 设置输入状态
     function setInputState(enabled) {
         elements.messageInput.disabled = !enabled;
-        elements.sendButton.disabled = !enabled;
+        // 根据输入框状态和内容设置发送按钮状态
+        if (enabled) {
+            // 只有当输入框有内容时才启用发送按钮
+            const isEmpty = !elements.messageInput.value.trim();
+            elements.sendButton.disabled = isEmpty;
+        } else {
+            // 禁用状态时，发送按钮也禁用
+            elements.sendButton.disabled = true;
+        }
+        
         if (enabled) {
             elements.messageInput.value = '';
             elements.messageInput.style.height = 'auto';
@@ -653,7 +696,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 spacerDiv.style.clear = 'both';
                 messageDiv.appendChild(spacerDiv);
             }
-            updateMessageDisplay(messageDiv, content);
+        updateMessageDisplay(messageDiv, content);
 		}
         
         elements.chatMessages.appendChild(messageDiv);
@@ -775,6 +818,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 开始新对话
     function startNewChat() {
+        // 添加确认提示，防止意外清空对话
+        if (elements.chatMessages.children.length > 0) {
+            const confirmNewChat = window.confirm('开始新对话将清空当前对话内容，确定继续吗？');
+            if (!confirmNewChat) {
+                return; // 用户取消，不清空对话
+            }
+        }
+        
         elements.chatMessages.innerHTML = '';
         showSystemMessage('开始新对话', 'info');
     }

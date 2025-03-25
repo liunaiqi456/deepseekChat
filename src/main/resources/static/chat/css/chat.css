@@ -228,25 +228,12 @@ body, html {
     }
 }
 
-/* 移动端适配 */
-@media (max-width: 768px) {
-    .message {
-        max-width: 90%;
-    }
-    
-    .message.user {
-        margin-right: 0.5rem;
-    }
-    
-    .message.assistant {
-        margin-left: 0.5rem;
-    }
-}
-
+/* 全局消息内容样式 */
 .message-content {
     line-height: 1.6;
     overflow-wrap: break-word;
     word-wrap: break-word;
+    margin-bottom: 20px; /* 正常的消息底部边距 */
 }
 
 .message-content p {
@@ -474,11 +461,57 @@ body, html {
     }
 
     .message {
-        max-width: 95%;
+        max-width: 90%;
     }
     
     .message-content {
         font-size: 15px;
+    }
+
+    /* 移动设备上专门设置AI消息和用户消息的底部边距 - 提高优先级 */
+    .message.assistant .message-content {
+        margin-bottom: 40px !important; /* 使用!important提高优先级 */
+    }
+    
+    .message.user .message-content {
+        margin-bottom: 20px !important; /* 减小用户消息的底部边距 */
+    }
+    
+    /* 最后一条消息的底部边距额外增加，以避免被输入框遮挡 */
+    .message.assistant:last-child .message-content {
+        margin-bottom: 120px !important; /* 只对最后一条AI消息使用大底部边距 */
+    }
+    
+    /* 最后一条用户消息也需要一些额外的边距，但比AI消息小 */
+    .message.user:last-child .message-content {
+        margin-bottom: 80px !important; /* 用户消息的底部边距略小一些 */
+    }
+    
+    /* 确保输入框不遮挡内容 */
+    .chat-messages {
+        padding-bottom: 120px !important; /* 添加额外的内容区底部空间 */
+    }
+    
+    /* 增强移动设备上发送按钮的可见性 */
+    #send-button {
+        min-height: 44px;
+        min-width: 60px;
+        font-size: 16px;
+        padding: 0 1rem;
+        background-color: var(--color-primary);
+        color: white;
+        border-radius: 0 var(--border-radius-lg) var(--border-radius-lg) 0;
+    }
+    
+    /* 确保发送按钮触摸面积足够大 */
+    #send-button:not(:disabled) {
+        background-color: var(--color-primary);
+    }
+    
+    /* 确保输入框在移动设备上有足够大的字体 */
+    #message-input {
+        font-size: 16px; /* 防止iOS自动缩放 */
+        padding: 0.75rem;
     }
 }
 
