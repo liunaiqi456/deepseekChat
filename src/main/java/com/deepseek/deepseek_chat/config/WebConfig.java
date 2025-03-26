@@ -1,4 +1,4 @@
-package com.deepseek.deepseek_chat;
+package com.deepseek.deepseek_chat.config;
 
 import org.springframework.context.annotation.Configuration;
 import org.springframework.lang.NonNull;
