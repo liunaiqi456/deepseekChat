@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+</head>
+<body>
+    <!-- 主聊天区域模板 -->
+    <main th:fragment="chat-main" role="main" class="chat-main">
+        <header class="status-bar" role="status" aria-live="polite"></header>
+        <section id="chat-messages" class="chat-messages" role="log" aria-label="聊天消息">
+            <!-- 消息将在这里动态添加 -->
+        </section>
+        <footer class="input-container">
+            <form id="chat-form" class="chat-form">
+                <div class="input-group">
+                    <textarea id="message-input" 
+                            class="form-control" 
+                            placeholder="输入消息，Enter换行" 
+                            aria-label="聊天输入框"
+                            rows="1"></textarea>
+                    <button id="send-button" 
+                            class="btn btn-primary" 
+                            type="submit" 
+                            disabled 
+                            aria-label="发送消息">发送</button>
+                </div>
+            </form>
+        </footer>
+    </main>
+</body>
+</html> 

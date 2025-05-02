@@ -1,37 +1,52 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>500 - Internal Server Error</title>
+    <title>服务器错误 - DeepSeek Chat</title>
     <style>
         body {
-            font-family: Arial, sans-serif;
-            background-color: #f8f9fa;
-            color: #343a40;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
             text-align: center;
-            padding: 50px;
+        }
+        .error-container {
+            margin-top: 50px;
         }
         h1 {
-            font-size: 48px;
             color: #dc3545;
+            font-size: 2.5em;
         }
-        p {
-            font-size: 18px;
+        .error-message {
+            margin: 20px 0;
+            font-size: 1.2em;
         }
-        a {
-            color: #007bff;
+        .home-link {
+            display: inline-block;
+            margin-top: 20px;
+            padding: 10px 20px;
+            background-color: #007bff;
+            color: white;
             text-decoration: none;
+            border-radius: 5px;
         }
-        a:hover {
-            text-decoration: underline;
+        .home-link:hover {
+            background-color: #0056b3;
         }
     </style>
 </head>
 <body>
-    <h1>500</h1>
-    <p>Oops! Something went wrong on our end.</p>
-    <p>We're working on it. Please try again later.</p>
-    <p>Return to <a href="/">home</a>.</p>
+    <div class="error-container">
+        <h1>500</h1>
+        <div class="error-message">
+            抱歉，服务器发生了一些错误
+        </div>
+        <p>我们的工程师正在努力修复这个问题。请稍后再试。</p>
+        <a href="/" class="home-link">返回首页</a>
+    </div>
 </body>
 </html>

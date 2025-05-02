@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+</head>
+<body>
+    <!-- 侧边栏模板 -->
+    <div th:fragment="sidebar">
+        <!-- 侧边栏 -->
+        <nav class="sidebar" role="navigation" aria-label="对话导航">
+            <header class="sidebar-header">
+                <img th:src="@{/chat/logo.png}" alt="DeepSeek" class="logo">
+                <button class="btn btn-primary w-100" aria-label="新建对话">新建对话</button>
+            </header>
+            <nav class="history-nav">
+                <h2 class="visually-hidden">历史对话</h2>
+                <ul class="list-unstyled" role="list" aria-label="历史对话列表"></ul>
+            </nav>
+        </nav>
+
+        <!-- 侧边栏背景遮罩 -->
+        <div class="sidebar-backdrop"></div>
+        
+        <!-- 侧边栏切换按钮 -->
+        <button class="sidebar-toggle" aria-label="切换侧边栏">
+            <span class="toggle-icon"></span>
+        </button>
+    </div>
+</body>
+</html>
