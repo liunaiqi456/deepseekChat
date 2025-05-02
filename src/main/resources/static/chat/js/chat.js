@@ -1,27 +1,4 @@
 document.addEventListener('DOMContentLoaded', () => {
-    // 全局点击事件处理
-    function handleGlobalClick(event) {
-        const target = event.target;
-
-        // 处理新对话按钮点击 - 需要确保这是实际的新对话按钮，而不是发送按钮
-        if (target.closest('.new-chat-btn')) {  // 修改选择器为更具体的类名
-            startNewChat();
-        }
-
-        // 处理历史对话点击
-        if (target.closest('.list-unstyled a')) {
-            loadHistoryChat(target.closest('a').dataset.chatId);
-        }
-
-        // 处理侧边栏切换
-        if (target.closest('.sidebar-toggle') || target.closest('.sidebar-backdrop')) {
-            toggleSidebar();
-        }
-    }
-
-    // 使用事件委托处理所有点击事件
-    document.addEventListener('click', handleGlobalClick);
-    
     // 获取必要的DOM元素
     const elements = {
         messageInput: document.getElementById('message-input'),
@@ -34,6 +11,259 @@ document.addEventListener('DOMContentLoaded', () => {
         statusBar: document.querySelector('.status-bar')
     };
 
+    // 用于存储聊天历史的键
+    const CHAT_HISTORY_KEY = 'deepseek_chat_history';
+
+    // 获取当前URL中的会话ID - 使用let而不是const，使其可以修改
+    let sessionId = getSessionIdFromUrl() || generateSessionId();
+    
+    // 设置初始历史状态
+    if (sessionId && !window.history.state) {
+        const currentUrl = window.location.href;
+        window.history.replaceState({ sessionId: sessionId }, '', currentUrl);
+    }
+    
+    // 加载历史对话列表
+    loadChatHistoryList();
+    
+    // 将会话ID添加到侧边栏历史记录（如果不在历史记录中）
+    if (sessionId) {
+        addChatToHistory('新对话', sessionId);
+    }
+
+    // 获取URL中的会话ID
+    function getSessionIdFromUrl() {
+        const path = window.location.pathname;
+        const matches = path.match(/\/chat\/s\/([\w-]+)/);
+        return matches ? matches[1] : null;
+    }
+
+    // 加载历史对话列表
+    function loadChatHistoryList() {
+        try {
+            // 从localStorage获取历史对话列表
+            const historyJSON = localStorage.getItem(CHAT_HISTORY_KEY);
+            if (historyJSON) {
+                const history = JSON.parse(historyJSON);
+                
+                // 清空现有列表
+                const historyList = document.querySelector('.history-nav ul');
+                if (historyList) {
+                    historyList.innerHTML = '';
+                }
+                
+                // 检查当前会话是否在历史记录中
+                let sessionFound = false;
+                
+                // 遍历历史记录并添加到侧边栏
+                if (history.length > 0) {
+                    history.forEach(chat => {
+                        // 检查是否为当前会话
+                        const isActive = chat.id === sessionId;
+                        if (isActive) {
+                            sessionFound = true;
+                        }
+                        addChatToHistory(chat.title || '新对话', chat.id, isActive, false); // 最后一个参数false表示不保存到localStorage
+                    });
+                    
+                    console.log('已从本地存储加载', history.length, '个历史对话');
+                }
+                
+                // 如果当前会话不在历史记录中，添加它
+                if (!sessionFound && sessionId) {
+                    addChatToHistory('新对话', sessionId, true, true);
+                }
+            } else {
+                // 如果没有历史记录，添加当前会话
+                if (sessionId) {
+                    addChatToHistory('新对话', sessionId, true, true);
+                }
+            }
+        } catch (error) {
+            console.error('加载历史对话失败:', error);
+            // 出错时，至少添加当前会话
+            if (sessionId) {
+                addChatToHistory('新对话', sessionId, true, true);
+            }
+        }
+    }
+
+    // 保存历史对话列表到localStorage
+    function saveChatHistoryList() {
+        try {
+            // 获取所有对话链接
+            const chatLinks = document.querySelectorAll('.chat-link');
+            const history = [];
+            
+            // 遍历链接并构建历史记录数组
+            chatLinks.forEach(link => {
+                const id = link.getAttribute('data-chat-id');
+                // 提取链接文本（排除删除按钮的文本）
+                const titleEl = link.cloneNode(true);
+                const deleteBtn = titleEl.querySelector('.delete-chat-btn');
+                if (deleteBtn) {
+                    deleteBtn.remove();
+                }
+                const title = titleEl.textContent.trim();
+                
+                history.push({
+                    id: id,
+                    title: title || '新对话'
+                });
+            });
+            
+            // 保存到localStorage
+            localStorage.setItem(CHAT_HISTORY_KEY, JSON.stringify(history));
+            console.log('已保存', history.length, '个对话到本地存储');
+        } catch (error) {
+            console.error('保存历史对话失败:', error);
+        }
+    }
+
+    // 添加对话到历史列表
+    function addChatToHistory(chatName, sessionId, isActive = true, shouldSave = true) {
+        const historyList = document.querySelector('.history-nav ul');
+        if (!historyList) return;
+        
+        console.log('添加会话到历史记录:', chatName, sessionId); // 调试输出
+        
+        // 检查是否已存在此会话ID的对话
+        const existingChat = document.querySelector(`.chat-link[data-chat-id="${sessionId}"]`);
+        if (existingChat) {
+            // 如果已存在，只更新active状态
+            if (isActive) {
+                document.querySelectorAll('.chat-link').forEach(link => {
+                    link.classList.remove('active');
+                });
+                existingChat.classList.add('active');
+            }
+            return;
+        }
+
+        const chatItem = document.createElement('li');
+        chatItem.className = 'chat-item';
+
+        const chatLink = document.createElement('a');
+        chatLink.href = `/chat/s/${sessionId}`;
+        chatLink.className = 'chat-link';
+        if (isActive) chatLink.classList.add('active');
+        chatLink.setAttribute('data-chat-id', sessionId); // 确保设置data-chat-id属性
+        chatLink.textContent = chatName;
+
+        // 添加会话管理按钮
+        const deleteButton = document.createElement('button');
+        deleteButton.className = 'delete-chat-btn';
+        deleteButton.innerHTML = '&times;';
+        deleteButton.title = '删除此对话';
+        deleteButton.setAttribute('aria-label', '删除对话');
+        deleteButton.onclick = function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            deleteChatHistory(sessionId, chatItem);
+            return false; // 阻止事件冒泡
+        };
+
+        chatLink.appendChild(deleteButton);
+        chatItem.appendChild(chatLink);
+        
+        // 将新会话添加到列表顶部
+        if (historyList.firstChild) {
+            historyList.insertBefore(chatItem, historyList.firstChild);
+        } else {
+            historyList.appendChild(chatItem);
+        }
+        
+        // 保存到localStorage
+        if (shouldSave) {
+            saveChatHistoryList();
+        }
+    }
+
+    // 删除会话历史
+    async function deleteChatHistory(chatId, chatItem) {
+        const confirmDelete = window.confirm('确定要删除这个对话吗？');
+        if (!confirmDelete) return;
+        
+        try {
+            // 从DOM中移除
+            chatItem.remove();
+            
+            // 如果删除的是当前会话，检查是否有其他会话可以切换到
+            if (chatId === sessionId) {
+                // 获取所有剩余的对话链接
+                const remainingChats = document.querySelectorAll('.chat-link');
+                
+                if (remainingChats.length > 0) {
+                    // 如果还有其他对话，切换到第一个
+                    const firstChatId = remainingChats[0].getAttribute('data-chat-id');
+                    loadHistoryChat(firstChatId);
+                    showSystemMessage('已切换到其他对话', 'info');
+                } else {
+                    // 如果没有其他对话，创建一个新的
+                    startNewChat();
+                }
+            }
+            
+            // 更新localStorage
+            saveChatHistoryList();
+            
+            // 显示成功消息
+            showSystemMessage('已删除对话', 'success');
+        } catch (error) {
+            console.error('删除对话时出错:', error);
+            alert('删除对话失败，请刷新页面重试。');
+        }
+    }
+
+    // 更新会话标题
+    function updateChatTitle(title) {
+        // 查找当前活动的会话链接
+        const activeChat = document.querySelector('.chat-link.active');
+        if (activeChat) {
+            // 保存原始内容以防包含删除按钮
+            const deleteBtn = activeChat.querySelector('.delete-chat-btn');
+            
+            // 更新文本内容
+            activeChat.textContent = title;
+            
+            // 如果有删除按钮，重新添加
+            if (deleteBtn) {
+                activeChat.appendChild(deleteBtn);
+            }
+            
+            // 保存更新后的历史记录
+            saveChatHistoryList();
+        }
+    }
+
+    // 全局点击事件处理
+    function handleGlobalClick(event) {
+        const target = event.target;
+
+        // 处理新对话按钮点击
+        if (target.closest('#new-chat-button')) {
+            startNewChat();
+        }
+
+        // 处理历史对话点击
+        if (target.closest('.list-unstyled a')) {
+            const chatLink = target.closest('.list-unstyled a');
+            // 确保使用data-chat-id属性获取聊天ID
+            const chatId = chatLink.dataset.chatId || chatLink.getAttribute('data-chat-id');
+            if (chatId) {
+                loadHistoryChat(chatId);
+            }
+        }
+
+        // 处理侧边栏切换
+        if (target.closest('.sidebar-toggle') || target.closest('.sidebar-backdrop')) {
+            toggleSidebar();
+        }
+    }
+
+    // 使用事件委托处理所有点击事件
+    document.addEventListener('click', handleGlobalClick);
+    
     // 初始化
     initializeChat();
 
@@ -53,12 +283,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // 设置输入框事件监听
         elements.messageInput.addEventListener('input', handleInput);
+        
+        // 添加键盘事件监听，处理回车发送消息
+        elements.messageInput.addEventListener('keydown', handleKeyPress);
 
         // 设置表单提交事件
         elements.chatForm.addEventListener('submit', handleSubmit);
 
         // 设置消息观察器
         setupMessageObserver();
+        
+        // 监听历史状态变化
+        window.addEventListener('popstate', handleHistoryChange);
 
         // 初始化 Socket.IO
         initializeSocketIO();
@@ -105,39 +341,36 @@ document.addEventListener('DOMContentLoaded', () => {
         // 检测是否为移动设备
         const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
         
-        // 如果是移动设备，处理换行
+        // 如果是移动设备，按下Enter键时插入换行
         if (isMobile) {
-            // 在移动设备上，只处理Enter键事件一次
             if (event.key === 'Enter') {
                 // 阻止默认行为（提交表单和自动插入换行）
                 event.preventDefault();
                 
-                // 只在keydown事件时插入换行
-                if (event.type === 'keydown') {
-                    insertNewline(event.target);
-                }
+                // 在移动设备上，默认Enter键插入换行
+                insertNewline(event.target);
                 return;
             }
-            // 其他按键正常处理
-            return;
+            return; // 其他按键正常处理
         }
         
         // 桌面端处理：按下Enter键且没有按下Shift键和Alt键，则发送消息
         if (event.key === 'Enter' && !event.shiftKey && !event.altKey) {
-            event.preventDefault();
+            event.preventDefault(); // 阻止默认行为
+            
             // 检查消息是否为空
             const isEmpty = !event.target.value.trim();
             if (!isEmpty) {
-            handleSubmit(event);
+                handleSubmit(event); // 如果消息不为空，则发送
             } else {
-                // 如果消息为空，可以添加提示或振动反馈
+                // 如果消息为空，可以添加振动反馈（如果支持）
                 if (navigator.vibrate) {
                     navigator.vibrate(100); // 轻微振动提示
                 }
             }
         }
-        // 如果按下Enter键且按下Alt键或Shift键，则插入换行
-        else if (event.key === 'Enter' && (event.altKey || event.shiftKey)) {
+        // 如果按下Enter键且按下Shift键或Alt键，则插入换行
+        else if (event.key === 'Enter' && (event.shiftKey || event.altKey)) {
             event.preventDefault();
             insertNewline(event.target);
         }
@@ -304,10 +537,7 @@ document.addEventListener('DOMContentLoaded', () => {
         return codeIndicators.some(pattern => pattern.test(text));
     }
 
-    // 生成会话ID
-    const sessionId = generateSessionId();
-
-	// 添加表格缓冲处理
+    // 添加表格缓冲处理
 	let tableBuffer = '';
 	let isCollectingTable = false;
 	let tableStartIndex = -1;
@@ -462,47 +692,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // 生成会话ID
-    function generateSessionId() {
-        return 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-    }
-
-    // 清除对话历史
-    async function clearHistory() {
-        // 添加确认提示，防止意外清空对话
-        if (elements.chatMessages.children.length > 0) {
-            const confirmClear = window.confirm('确定要清除所有对话历史吗？');
-            if (!confirmClear) {
-                return; // 用户取消，不清空对话
-            }
-        }
-        
-        try {
-            await fetch('/chat/clear', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ 
-                    sessionId: sessionId
-                })
-            });
-            
-            // 清空消息显示区域
-            elements.chatMessages.innerHTML = '';
-            showSystemMessage('对话历史已清除', 'success');
-            setTimeout(() => {
-                showSystemMessage('', '');
-            }, 2000);
-        } catch (error) {
-            console.error('清除历史记录时出错:', error);
-            showSystemMessage('清除历史记录失败', 'error');
-            setTimeout(() => {
-                showSystemMessage('', '');
-            }, 2000);
-        }
-    }
-
     // 处理表单提交
     async function handleSubmit(event) {
         event.preventDefault();
@@ -519,21 +708,31 @@ document.addEventListener('DOMContentLoaded', () => {
             return; // 直接返回，不执行后续代码
         }
         
-            // 立即清空并重置输入框
-            elements.messageInput.value = '';
-            elements.messageInput.style.height = 'auto';
-            elements.messageInput.style.height = `${Math.min(elements.messageInput.scrollHeight, 200)}px`;
+        // 立即清空并重置输入框
+        elements.messageInput.value = '';
+        elements.messageInput.style.height = 'auto';
+        elements.messageInput.style.height = `${Math.min(elements.messageInput.scrollHeight, 200)}px`;
+        
+        // 禁用输入和发送按钮
+        setInputState(false);
+        
+        try {
+            // 如果这是第一条消息，用它来设置对话标题
+            const isFirstMessage = elements.chatMessages.children.length === 0;
             
-            // 禁用输入和发送按钮
-            setInputState(false);
+            // 发送消息
+            await askQuestionStreamPost(question);
             
-            try {
-            // 注意：这里不应该清空已有对话内容
-                await askQuestionStreamPost(question);
-            } catch (error) {
-                console.error('发送消息时出错:', error);
-                showSystemMessage('发送消息失败，请重试', 'error');
-                setInputState(true);
+            // 如果是第一条消息，将其作为对话标题
+            if (isFirstMessage) {
+                // 使用前20个字符作为标题，如果超过20字符则添加省略号
+                const title = question.length > 20 ? question.substring(0, 20) + '...' : question;
+                updateChatTitle(title);
+            }
+        } catch (error) {
+            console.error('发送消息时出错:', error);
+            showSystemMessage('发送消息失败，请重试', 'error');
+            setInputState(true);
         }
     }
 
@@ -816,6 +1015,45 @@ document.addEventListener('DOMContentLoaded', () => {
         document.body.style.overflow = elements.sidebar.classList.contains('show') ? 'hidden' : '';
     }
 
+    // 处理历史状态变化
+    function handleHistoryChange(event) {
+        if (event.state && event.state.sessionId) {
+            console.log('历史状态变化，新会话ID:', event.state.sessionId);
+            // 更新当前会话ID
+            sessionId = event.state.sessionId;
+            
+            // 检查此会话是否已在侧边栏中
+            const existingChat = document.querySelector(`.chat-link[data-chat-id="${sessionId}"]`);
+            if (!existingChat) {
+                // 如果不存在，添加到侧边栏
+                addChatToHistory('恢复的对话', sessionId);
+            } else {
+                // 高亮显示当前对话在侧边栏中的项
+                updateActiveChat(sessionId);
+            }
+            
+            // 清空消息显示区域，准备加载新会话
+            elements.chatMessages.innerHTML = '';
+            
+            // 这里可以添加加载新会话消息的逻辑
+            showSystemMessage('已切换到另一个对话', 'info');
+        }
+    }
+
+    // 更新活动对话项
+    function updateActiveChat(chatId) {
+        // 移除所有活动状态
+        document.querySelectorAll('.chat-link').forEach(link => {
+            link.classList.remove('active');
+        });
+        
+        // 设置新的活动项
+        const activeChat = document.querySelector(`.chat-link[data-chat-id="${chatId}"]`);
+        if (activeChat) {
+            activeChat.classList.add('active');
+        }
+    }
+
     // 开始新对话
     function startNewChat() {
         // 添加确认提示，防止意外清空对话
@@ -826,14 +1064,59 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
         
+        // 生成新的会话ID
+        const newSessionId = generateSessionId();
+        
+        // 先在侧边栏添加新对话
+        addChatToHistory('新对话', newSessionId);
+        
+        // 更新当前会话ID
+        sessionId = newSessionId;
+        
+        // 清空消息显示区域
         elements.chatMessages.innerHTML = '';
-        showSystemMessage('开始新对话', 'info');
+        
+        // 更新URL而不刷新页面
+        const newUrl = `/chat/s/${newSessionId}`;
+        window.history.pushState({ sessionId: newSessionId }, '', newUrl);
+        
+        // 显示欢迎消息
+        showSystemMessage('已创建新对话', 'success');
+        setTimeout(() => {
+            focusInput(); // 聚焦到输入框
+        }, 100);
     }
 
     // 加载历史对话
     function loadHistoryChat(chatId) {
-        // TODO: 实现历史对话加载逻辑
-        console.log('加载历史对话:', chatId);
+        // 如果点击的是当前活动对话，不做任何操作
+        if (chatId === sessionId) {
+            return;
+        }
+        
+        // 添加确认提示，防止意外丢失当前对话
+        if (elements.chatMessages.children.length > 0) {
+            const confirmLoad = window.confirm('切换到其他对话将离开当前对话，确定继续吗？');
+            if (!confirmLoad) {
+                return; // 用户取消，不切换对话
+            }
+        }
+        
+        // 更新当前会话ID
+        sessionId = chatId;
+        
+        // 高亮显示当前对话
+        updateActiveChat(chatId);
+        
+        // 清空消息显示区域，准备加载新会话
+        elements.chatMessages.innerHTML = '';
+        
+        // 更新URL而不刷新页面
+        const newUrl = `/chat/s/${chatId}`;
+        window.history.pushState({ sessionId: chatId }, '', newUrl);
+        
+        // 这里可以添加加载新会话消息的逻辑
+        showSystemMessage('已切换对话', 'info');
     }
 
     // 初始化 Socket.IO 连接
@@ -1089,6 +1372,47 @@ document.addEventListener('DOMContentLoaded', () => {
 
             document.head.appendChild(element);
         });
+    }
+
+    // 生成会话ID
+    function generateSessionId() {
+        return 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+    }
+    
+    // 清除对话历史
+    async function clearHistory() {
+        // 添加确认提示，防止意外清空对话
+        if (elements.chatMessages.children.length > 0) {
+            const confirmClear = window.confirm('确定要清除所有对话历史吗？');
+            if (!confirmClear) {
+                return; // 用户取消，不清空对话
+            }
+        }
+        
+        try {
+            await fetch('/chat/clear', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ 
+                    sessionId: sessionId
+                })
+            });
+            
+            // 清空消息显示区域
+            elements.chatMessages.innerHTML = '';
+            showSystemMessage('对话历史已清除', 'success');
+            setTimeout(() => {
+                showSystemMessage('', '');
+            }, 2000);
+        } catch (error) {
+            console.error('清除历史记录时出错:', error);
+            showSystemMessage('清除历史记录失败', 'error');
+            setTimeout(() => {
+                showSystemMessage('', '');
+            }, 2000);
+        }
     }
 });
 

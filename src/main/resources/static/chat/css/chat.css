@@ -437,6 +437,16 @@ body, html {
         transform: translateX(-100%);
         width: 80%;
         max-width: 300px;
+        z-index: 1100;
+        position: fixed;
+        top: 0;
+        bottom: 0;
+        left: 0;
+        transition: transform 0.3s ease;
+    }
+
+    .sidebar.show {
+        transform: translateX(0);
     }
 
     .chat-main {
@@ -454,6 +464,8 @@ body, html {
         right: 0;
         background-color: var(--color-bg);
         border-top: 1px solid var(--color-border);
+        padding: 0.5rem 1rem;
+        z-index: 1000;
     }
 
     #message-input {
@@ -513,6 +525,23 @@ body, html {
         font-size: 16px; /* 防止iOS自动缩放 */
         padding: 0.75rem;
     }
+    
+    /* 显示侧边栏切换按钮 */
+    .sidebar-toggle {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        position: fixed;
+        top: 10px;
+        left: 10px;
+        width: 40px;
+        height: 40px;
+        background-color: var(--color-primary);
+        color: white;
+        border-radius: 50%;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        z-index: 1010;
+    }
 }
 
 /* 可访问性隐藏 */
@@ -570,6 +599,7 @@ body, html {
 .list-unstyled li {
     margin-bottom: 0.5rem;
     position: relative;
+    overflow: hidden; /* 防止内容溢出 */
 }
 
 .list-unstyled a {
@@ -581,6 +611,11 @@ body, html {
     text-decoration: none;
     transition: all 0.2s ease;
     border: 1px solid transparent;
+    position: relative;
+    padding-right: 2.5rem; /* 为删除按钮留空间 */
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .list-unstyled a:hover {
@@ -598,6 +633,36 @@ body, html {
     content: "💬";
     margin-right: 0.5rem;
     font-size: 1.1em;
+}
+
+/* 删除对话按钮 */
+.delete-chat-btn {
+    position: absolute;
+    right: 0.5rem;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background-color: rgba(220, 53, 69, 0.15);
+    color: #dc3545;
+    border: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 16px;
+    opacity: 1; /* 始终显示 */
+    transition: background-color 0.2s ease;
+    z-index: 5; /* 确保在文本上层 */
+}
+
+.delete-chat-btn:hover {
+    background-color: rgba(220, 53, 69, 0.3);
+}
+
+.delete-chat-btn:active {
+    background-color: rgba(220, 53, 69, 0.4);
 }
 
 /* 状态栏 */
