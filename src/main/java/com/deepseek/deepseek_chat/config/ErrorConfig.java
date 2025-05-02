@@ -1,4 +1,4 @@
-package com.deepseek.chat.config;
+package com.deepseek.deepseek_chat.config;
 
 import org.springframework.boot.web.server.ErrorPage;
 import org.springframework.boot.web.server.ErrorPageRegistrar;
