@@ -50,8 +50,7 @@ public class ChatServiceImpl implements ChatService {
     }
     
     // 系统提示词
-    private static final String SYSTEM_PROMPT = "你是通义千问助手，由阿里云开发。请用中文回答用户的问题。请始终保持这个身份，不要声称自己是其他模型（如GPT等）。\n\n"
-            + "回答要求：\n"
+    private static final String SYSTEM_PROMPT = "回答要求：\n"
             + "1. 首先用最简单的语言解释概念，就像向一个15岁的孩子解释一样\n"
             + "2. 识别出关键概念并突出显示\n"
             + "3. 通过具体的日常生活例子来类比说明\n"

@@ -8,7 +8,11 @@ document.addEventListener('DOMContentLoaded', () => {
         sidebar: document.querySelector('.sidebar'),
         sidebarToggle: document.querySelector('.sidebar-toggle'),
         sidebarBackdrop: document.querySelector('.sidebar-backdrop'),
-        statusBar: document.querySelector('.status-bar')
+        statusBar: document.querySelector('.status-bar'),
+        addButton: document.getElementById('add-button'),
+        uploadMenu: document.getElementById('upload-menu'),
+        uploadFileOption: document.getElementById('upload-file-option'),
+        fileUpload: document.getElementById('file-upload')
     };
 
     // 用于存储聊天历史的键
@@ -299,6 +303,28 @@ document.addEventListener('DOMContentLoaded', () => {
         // 初始化 Socket.IO
         initializeSocketIO();
 
+        // 调试元素初始化状态
+        console.log('初始化前检查上传菜单相关元素:');
+        console.log('- 加号按钮:', elements.addButton);
+        console.log('- 上传菜单:', elements.uploadMenu);
+        console.log('- 上传文件选项:', elements.uploadFileOption);
+        console.log('- 文件上传输入:', elements.fileUpload);
+        
+        // 重新获取元素（确保在DOM完全加载后）
+        elements.addButton = document.getElementById('add-button');
+        elements.uploadMenu = document.getElementById('upload-menu');
+        elements.uploadFileOption = document.getElementById('upload-file-option');
+        elements.fileUpload = document.getElementById('file-upload');
+        
+        console.log('重新获取后的元素:');
+        console.log('- 加号按钮:', elements.addButton);
+        console.log('- 上传菜单:', elements.uploadMenu);
+        console.log('- 上传文件选项:', elements.uploadFileOption);
+        console.log('- 文件上传输入:', elements.fileUpload);
+
+        // 设置上传菜单事件
+        setupUploadMenu();
+
 			// 所有初始化完成后启用输入框，但保持发送按钮禁用状态（直到有输入）
 			setInputState(true);
             elements.sendButton.disabled = true; // 初始状态下输入框是空的，所以发送按钮应该是禁用的
@@ -345,7 +371,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (isMobile) {
             if (event.key === 'Enter') {
                 // 阻止默认行为（提交表单和自动插入换行）
-                event.preventDefault();
+            event.preventDefault();
                 
                 // 在移动设备上，默认Enter键插入换行
                 insertNewline(event.target);
@@ -677,7 +703,7 @@ document.addEventListener('DOMContentLoaded', () => {
             setInputState(true);
 			showSystemMessage('处理完成', 'success');
 
-		} catch (error) {
+        } catch (error) {
 			console.error('请求出错:', error);
 			showSystemMessage(error.message, 'error');
 
@@ -708,20 +734,20 @@ document.addEventListener('DOMContentLoaded', () => {
             return; // 直接返回，不执行后续代码
         }
         
-        // 立即清空并重置输入框
-        elements.messageInput.value = '';
-        elements.messageInput.style.height = 'auto';
-        elements.messageInput.style.height = `${Math.min(elements.messageInput.scrollHeight, 200)}px`;
-        
-        // 禁用输入和发送按钮
-        setInputState(false);
-        
-        try {
+            // 立即清空并重置输入框
+            elements.messageInput.value = '';
+            elements.messageInput.style.height = 'auto';
+            elements.messageInput.style.height = `${Math.min(elements.messageInput.scrollHeight, 200)}px`;
+            
+            // 禁用输入和发送按钮
+            setInputState(false);
+            
+            try {
             // 如果这是第一条消息，用它来设置对话标题
             const isFirstMessage = elements.chatMessages.children.length === 0;
             
             // 发送消息
-            await askQuestionStreamPost(question);
+                await askQuestionStreamPost(question);
             
             // 如果是第一条消息，将其作为对话标题
             if (isFirstMessage) {
@@ -729,10 +755,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 const title = question.length > 20 ? question.substring(0, 20) + '...' : question;
                 updateChatTitle(title);
             }
-        } catch (error) {
-            console.error('发送消息时出错:', error);
-            showSystemMessage('发送消息失败，请重试', 'error');
-            setInputState(true);
+            } catch (error) {
+                console.error('发送消息时出错:', error);
+                showSystemMessage('发送消息失败，请重试', 'error');
+                setInputState(true);
         }
     }
 
@@ -1413,6 +1439,227 @@ document.addEventListener('DOMContentLoaded', () => {
                 showSystemMessage('', '');
             }, 2000);
         }
+    }
+
+    // 设置上传菜单相关功能
+    function setupUploadMenu() {
+        // 检查元素是否存在
+        console.log('开始初始化上传菜单');
+        
+        // 重新获取元素（确保在DOM完全加载后）
+        elements.addButton = document.getElementById('add-button');
+        elements.uploadMenu = document.getElementById('upload-menu');
+        elements.uploadFileOption = document.getElementById('upload-file-option');
+        elements.fileUpload = document.getElementById('file-upload');
+        
+        console.log('上传菜单元素状态:');
+        console.log('- 加号按钮:', elements.addButton);
+        console.log('- 上传菜单:', elements.uploadMenu);
+        console.log('- 上传文件选项:', elements.uploadFileOption);
+        console.log('- 文件上传输入:', elements.fileUpload);
+        
+        if (!elements.addButton || !elements.uploadMenu) {
+            console.error('上传菜单元素不存在，跳过初始化');
+            return;
+        }
+        
+        // 设置初始状态
+        elements.uploadMenu.style.display = 'none';
+        elements.uploadMenu.classList.remove('show');
+        
+        // 点击加号按钮显示/隐藏菜单
+        elements.addButton.addEventListener('click', function(e) {
+            console.log('加号按钮被点击');
+            e.preventDefault();
+            e.stopPropagation(); // 阻止事件冒泡
+            toggleUploadMenu();
+        });
+        
+        // 点击上传文件选项
+        if (elements.uploadFileOption) {
+            elements.uploadFileOption.addEventListener('click', function(e) {
+                console.log('上传文件选项被点击');
+                e.preventDefault();
+                e.stopPropagation(); // 阻止事件冒泡
+                if (elements.fileUpload) {
+                    elements.fileUpload.click();
+                }
+                hideUploadMenu();
+            });
+        }
+        
+        // 处理文件上传
+        if (elements.fileUpload) {
+            elements.fileUpload.addEventListener('change', handleFileUpload);
+        }
+        
+        // 点击其他区域关闭菜单
+        document.addEventListener('click', function(e) {
+            if (elements.uploadMenu && 
+                elements.uploadMenu.style.display !== 'none' &&
+                !elements.uploadMenu.contains(e.target) && 
+                e.target !== elements.addButton && 
+                !elements.addButton.contains(e.target)) {
+                hideUploadMenu();
+            }
+        });
+        
+        console.log('上传菜单初始化完成');
+    }
+
+    // 切换上传菜单显示/隐藏
+    function toggleUploadMenu() {
+        console.log('切换上传菜单状态');
+        if (!elements.uploadMenu) {
+            console.error('上传菜单元素不存在，无法切换');
+            return;
+        }
+        
+        // 使用display属性判断菜单是否可见
+        const isMenuVisible = elements.uploadMenu.style.display !== 'none';
+        console.log('当前菜单是否可见:', isMenuVisible);
+        
+        if (isMenuVisible) {
+            hideUploadMenu();
+        } else {
+            showUploadMenu();
+        }
+    }
+
+    // 显示上传菜单
+    function showUploadMenu() {
+        console.log('显示上传菜单');
+        if (!elements.uploadMenu) {
+            console.error('上传菜单元素不存在，无法显示');
+            return;
+        }
+        
+        // 先设置display样式，再添加show类（确保过渡效果正常）
+        elements.uploadMenu.style.display = 'block';
+        
+        // 使用requestAnimationFrame确保样式变化被应用
+        requestAnimationFrame(() => {
+            elements.uploadMenu.classList.add('show');
+            console.log('上传菜单已显示，classList:', elements.uploadMenu.classList);
+        });
+    }
+
+    // 隐藏上传菜单
+    function hideUploadMenu() {
+        console.log('隐藏上传菜单');
+        if (!elements.uploadMenu) {
+            console.error('上传菜单元素不存在，无法隐藏');
+            return;
+        }
+        
+        // 先移除show类
+        elements.uploadMenu.classList.remove('show');
+        console.log('移除show类后的classList:', elements.uploadMenu.classList);
+        
+        // 直接设置不可见，不再使用延时
+        elements.uploadMenu.style.display = 'none';
+        console.log('设置菜单为不可见');
+    }
+
+    // 处理文件上传
+    function handleFileUpload(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+        
+        console.log('准备上传文件:', file.name, '文件大小:', file.size, 'bytes');
+        
+        // 显示上传进度提示
+        showSystemMessage(`正在上传文件: ${file.name}`, 'info');
+        
+        // 创建FormData对象
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('sessionId', sessionId);
+        
+        console.log('使用会话ID:', sessionId);
+        
+        // 发送文件到服务器
+        fetch('/chat/upload', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => {
+            console.log('上传响应状态:', response.status);
+            if (!response.ok) {
+                throw new Error('上传失败，HTTP状态码: ' + response.status);
+            }
+            return response.json();
+        })
+        .then(data => {
+            // 上传成功
+            console.log('上传成功，服务器响应:', data);
+            showSystemMessage('文件上传成功', 'success');
+            
+            // 在聊天区域显示上传的文件
+            addMessage(`上传了文件: ${file.name}`, 'user');
+            
+            // 如果有文件URL，添加到聊天消息中
+            if (data && data.fileUrl) {
+                console.log('文件URL:', data.fileUrl);
+                const fileMessage = createFileMessage(file.name, data.fileUrl);
+                elements.chatMessages.appendChild(fileMessage);
+                scrollToBottom();
+            }
+            
+            // 重置文件输入框
+            event.target.value = '';
+        })
+        .catch(error => {
+            console.error('文件上传错误:', error);
+            showSystemMessage('文件上传失败: ' + error.message, 'error');
+            // 重置文件输入框
+            event.target.value = '';
+        });
+    }
+
+    // 创建文件消息元素
+    function createFileMessage(fileName, fileUrl) {
+        const fileDiv = document.createElement('div');
+        fileDiv.className = 'message assistant';
+        
+        const senderDiv = document.createElement('div');
+        senderDiv.className = 'message-sender';
+        senderDiv.textContent = 'DeepSeek';
+        fileDiv.appendChild(senderDiv);
+        
+        const contentDiv = document.createElement('div');
+        contentDiv.className = 'message-content';
+        
+        // 根据文件类型显示不同的图标
+        const extension = fileName.split('.').pop().toLowerCase();
+        let fileIcon = '📄'; // 默认文件图标
+        
+        if (['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'].includes(extension)) {
+            fileIcon = '🖼️';
+        } else if (['doc', 'docx', 'rtf', 'txt'].includes(extension)) {
+            fileIcon = '📝';
+        } else if (['xls', 'xlsx', 'csv'].includes(extension)) {
+            fileIcon = '📊';
+        } else if (['ppt', 'pptx'].includes(extension)) {
+            fileIcon = '📽️';
+        } else if (['pdf'].includes(extension)) {
+            fileIcon = '📑';
+        } else if (['zip', 'rar', '7z', 'tar', 'gz'].includes(extension)) {
+            fileIcon = '🗜️';
+        }
+        
+        contentDiv.innerHTML = `
+            <div class="file-attachment">
+                <div class="file-icon">${fileIcon}</div>
+                <div class="file-info">
+                    <div class="file-name">${fileName}</div>
+                    <a href="${fileUrl}" target="_blank" class="file-download">下载文件</a>
+                </div>
+            </div>
+        `;
+        
+        fileDiv.appendChild(contentDiv);
+        return fileDiv;
     }
 });
 

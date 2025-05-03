@@ -12,6 +12,45 @@
         </section>
         <footer class="input-container">
             <form id="chat-form" class="chat-form">
+                <div class="input-toolbar">
+                    <button type="button" id="add-button" class="tool-button" title="添加文件">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="12" y1="5" x2="12" y2="19"></line>
+                            <line x1="5" y1="12" x2="19" y2="12"></line>
+                        </svg>
+                    </button>
+                    <div class="divider"></div>
+                </div>
+                
+                <!-- 上传功能下拉菜单 -->
+                <div id="upload-menu" class="upload-menu" style="z-index: 9999; display: none;">
+                    <div class="upload-option">
+                        <img src="/chat/img/google-drive.svg" alt="Google Drive" width="24" height="24">
+                        <span>连接到Google Drive</span>
+                    </div>
+                    <div class="upload-option">
+                        <img src="/chat/img/onedrive-personal.svg" alt="OneDrive个人版" width="24" height="24">
+                        <span>连接到Microsoft OneDrive (个人)</span>
+                    </div>
+                    <div class="upload-option">
+                        <img src="/chat/img/onedrive-business.svg" alt="OneDrive企业版" width="24" height="24">
+                        <span>连接到Microsoft OneDrive (工作/学校)</span>
+                        <small>包括SharePoint</small>
+                    </div>
+                    <div class="upload-divider"></div>
+                    <div class="upload-option" id="upload-file-option">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                            <polyline points="17 8 12 3 7 8"></polyline>
+                            <line x1="12" y1="3" x2="12" y2="15"></line>
+                        </svg>
+                        <span>上传文件</span>
+                    </div>
+                </div>
+                
+                <!-- 隐藏的文件上传输入 -->
+                <input type="file" id="file-upload" style="display: none;">
+                
                 <div class="input-group">
                     <textarea id="message-input" 
                             class="form-control" 
@@ -26,6 +65,13 @@
                 </div>
             </form>
         </footer>
+        
+        <script>
+            // 简化页面初始JavaScript，所有功能由chat.js中的代码处理
+            document.addEventListener('DOMContentLoaded', function() {
+                console.log('聊天主界面加载完成，等待chat.js初始化...');
+            });
+        </script>
     </main>
 </body>
 </html> 

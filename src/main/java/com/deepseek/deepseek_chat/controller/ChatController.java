@@ -28,8 +28,14 @@ public class ChatController {
     @Autowired
     private ChatService chatService;
     
+    @Autowired
+    private FileUploadController fileUploadController;
+    
     // 使用ConcurrentHashMap存储会话历史
     private final Map<String, List<Message>> sessionHistory = new ConcurrentHashMap<>();
+    
+    // 线程池用于异步处理
+    private final ExecutorService executorService = Executors.newCachedThreadPool();
     
     @PostMapping("/ask")
     public Map<String, String> chat(@RequestBody Map<String, String> request) throws NoApiKeyException, InputRequiredException {
@@ -54,9 +60,8 @@ public class ChatController {
     @PostMapping("/stream")
     public SseEmitter streamChat(@RequestBody ChatRequest request) {
         SseEmitter emitter = new SseEmitter(180000L); // 3分钟超时
-        ExecutorService executor = Executors.newSingleThreadExecutor();
-
-        executor.execute(() -> {
+        
+        executorService.execute(() -> {
             try {
                 chatService.streamChat(request.getQuestion(), request.getSessionId(), new ChatService.ChatCallback() {
                     @Override
@@ -93,8 +98,6 @@ public class ChatController {
                             emitter.complete();
                         } catch (Exception e) {
                             logger.error("发送完成消息时出错", e);
-                        } finally {
-                            executor.shutdown();
                         }
                     }
 
@@ -107,13 +110,13 @@ public class ChatController {
                             emitter.send(SseEmitter.event()
                                 .data(mapper.writeValueAsString(errorJson))
                                 .name("error"));
-            emitter.complete();
+                            emitter.complete();
                         } catch (Exception e) {
                             logger.error("发送错误消息时出错", e);
                         }
                     }
                 });
-        } catch (Exception e) {
+            } catch (Exception e) {
                 logger.error("处理请求时出错", e);
                 try {
                     ObjectMapper mapper = new ObjectMapper();
@@ -123,7 +126,7 @@ public class ChatController {
                     emitter.send(SseEmitter.event()
                         .data(mapper.writeValueAsString(errorJson))
                         .name("error"));
-                emitter.complete();
+                    emitter.complete();
                 } catch (Exception ex) {
                     logger.error("发送错误消息时出错", ex);
                 }
@@ -148,7 +151,19 @@ public class ChatController {
     public void clearHistory(@RequestBody Map<String, String> request) {
         String sessionId = request.get("sessionId");
         logger.info("清除会话历史 - 会话ID: {}", sessionId);
+        
+        // 清除会话历史
         sessionHistory.remove(sessionId);
+        
+        // 异步清理上传的文件
+        executorService.execute(() -> {
+            try {
+                fileUploadController.cleanupSessionFiles(sessionId);
+                logger.info("已清理会话 {} 的上传文件", sessionId);
+            } catch (Exception e) {
+                logger.error("清理会话 {} 的上传文件时出错", sessionId, e);
+            }
+        });
     }
 }
 

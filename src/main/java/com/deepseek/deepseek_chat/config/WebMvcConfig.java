@@ -5,10 +5,15 @@ import org.springframework.lang.NonNull;
 import org.springframework.web.servlet.config.annotation.CorsRegistry;
 import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
+import org.springframework.beans.factory.annotation.Value;
+import java.io.File;
 
 
 @Configuration
 public class WebMvcConfig implements WebMvcConfigurer {
+    
+    @Value("${file.upload-dir:${user.home}/deepseek/uploads}")
+    private String uploadDir;
     
     @Override
     public void addResourceHandlers(@NonNull ResourceHandlerRegistry registry) {
@@ -43,6 +48,11 @@ public class WebMvcConfig implements WebMvcConfigurer {
         registry.addResourceHandler("/chat/js/**")
                 .addResourceLocations("classpath:/static/chat/js/")
                 .setCachePeriod(0);  // 开发时禁用缓存
+        
+        // 添加上传文件的资源映射
+        registry.addResourceHandler("/uploads/**")
+                .addResourceLocations("file:" + uploadDir + File.separator)
+                .setCachePeriod(3600);
     }
 
     @Override
