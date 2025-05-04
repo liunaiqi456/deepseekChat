@@ -14,6 +14,645 @@ try {
     console.warn('VConsole initialization failed:', error);
 }
 
+// 学习分析管理器
+class LearningAnalytics {
+    constructor() {
+        this.STORAGE_KEY = 'learning_analytics';
+        this.data = this.loadData();
+    }
+
+    // 加载数据
+    loadData() {
+        try {
+            const stored = localStorage.getItem(this.STORAGE_KEY);
+            return stored ? JSON.parse(stored) : {
+                questions: {},           // 问题频率统计
+                topics: {},             // 主题分布
+                sessionAnalytics: {},    // 会话分析
+                personalRecommendations: {} // 个性化建议
+            };
+        } catch (error) {
+            console.error('加载学习数据失败:', error);
+            return {
+                questions: {},
+                topics: {},
+                sessionAnalytics: {},
+                personalRecommendations: {}
+            };
+        }
+    }
+
+    // 保存数据
+    saveData() {
+        try {
+            localStorage.setItem(this.STORAGE_KEY, JSON.stringify(this.data));
+        } catch (error) {
+            console.error('保存学习数据失败:', error);
+        }
+    }
+
+    // 记录新问题
+    recordQuestion(question, sessionId) {
+        try {
+            console.log('记录问题:', question, '会话ID:', sessionId);
+            
+            // 1. 更新问题频率
+            const questionKey = this.normalizeQuestion(question);
+            this.data.questions[questionKey] = (this.data.questions[questionKey] || 0) + 1;
+
+            // 2. 分析问题主题
+            const topics = this.analyzeTopics(question);
+            console.log('分析出的主题:', topics);
+            
+            topics.forEach(topic => {
+                this.data.topics[topic] = (this.data.topics[topic] || 0) + 1;
+            });
+
+            // 3. 更新会话分析
+            if (!this.data.sessionAnalytics[sessionId]) {
+                console.log('创建新的会话数据');
+                this.data.sessionAnalytics[sessionId] = {
+                    questions: [],
+                    topics: new Set(),  // 确保使用Set
+                    startTime: Date.now(),
+                    lastActive: Date.now()
+                };
+            } else if (!(this.data.sessionAnalytics[sessionId].topics instanceof Set)) {
+                console.log('将已有topics转换为Set');
+                // 如果topics不是Set，将其转换为Set
+                const existingTopics = Array.from(this.data.sessionAnalytics[sessionId].topics || []);
+                this.data.sessionAnalytics[sessionId].topics = new Set(existingTopics);
+            }
+            
+            // 添加问题记录
+            this.data.sessionAnalytics[sessionId].questions.push({
+                question: question,
+                timestamp: Date.now(),
+                topics: topics
+            });
+            
+            // 更新主题集合
+            const sessionTopics = this.data.sessionAnalytics[sessionId].topics;
+            topics.forEach(topic => {
+                console.log('添加主题到Set:', topic);
+                sessionTopics.add(topic);
+            });
+            
+            // 更新最后活动时间
+            this.data.sessionAnalytics[sessionId].lastActive = Date.now();
+
+            // 4. 生成个性化建议
+            this.generateRecommendations(sessionId);
+
+            // 5. 保存更新
+            this.saveData();
+            console.log('问题记录完成，当前会话数据:', {
+                questions: this.data.sessionAnalytics[sessionId].questions.length,
+                topics: Array.from(this.data.sessionAnalytics[sessionId].topics),
+                startTime: new Date(this.data.sessionAnalytics[sessionId].startTime).toLocaleString(),
+                lastActive: new Date(this.data.sessionAnalytics[sessionId].lastActive).toLocaleString()
+            });
+
+        } catch (error) {
+            console.error('记录问题时出错:', error);
+            // 尝试恢复或初始化数据结构
+            if (!this.data.sessionAnalytics[sessionId]) {
+                this.data.sessionAnalytics[sessionId] = {
+                    questions: [],
+                    topics: new Set(),
+                    startTime: Date.now(),
+                    lastActive: Date.now()
+                };
+            }
+        }
+    }
+
+    // 标准化问题文本
+    normalizeQuestion(question) {
+        return question.toLowerCase().trim();
+    }
+
+    // 分析问题主题
+    analyzeTopics(question) {
+        console.log('开始分析问题主题:', question);
+        const topics = new Set();
+        const normalizedQuestion = question.toLowerCase();
+        
+        // 数学相关关键词
+        const mathKeywords = /方程|函数|几何|代数|证明|计算|求解|数列|极限|导数|积分|三角|概率|统计|矩阵|向量|集合|不等式|方差|均值|微分|线性|二次|一元|二元|多项式|因式|分解|最大值|最小值|函数图像|数轴|坐标|圆|相似|全等|勾股|椭圆|双曲线|抛物线/g;
+        if (mathKeywords.test(normalizedQuestion)) {
+            topics.add('数学');
+        }
+        
+        // 物理相关关键词
+        const physicsKeywords = /力|速度|加速度|动能|势能|电|磁|热|光|波|功|能量|质量|密度|压强|浮力|摩擦|重力|弹力|电流|电压|电阻|电场|磁场|温度|热量|声波|频率|波长|反射|折射|干涉|衍射|动量|冲量|功率|机械|牛顿|库仑|欧姆|焦耳/g;
+        if (physicsKeywords.test(normalizedQuestion)) {
+            topics.add('物理');
+        }
+        
+        // 化学相关关键词
+        const chemistryKeywords = /元素|化合物|反应|氧化|还原|酸|碱|盐|离子|原子|分子|化学式|方程式|价态|价电子|化合价|周期表|金属|非金属|氧化物|氢氧化物|浓度|溶液|溶解度|催化剂|电解质|氧化还原|中和|燃烧|分解|置换|复分解|沉淀/g;
+        if (chemistryKeywords.test(normalizedQuestion)) {
+            topics.add('化学');
+        }
+        
+        // 生物相关关键词
+        const biologyKeywords = /细胞|基因|遗传|进化|生态|光合|呼吸|酶|蛋白质|DNA|RNA|染色体|减数分裂|有丝分裂|生物膜|线粒体|叶绿体|内质网|高尔基体|溶酶体|核糖体|细胞壁|细胞膜|生态系统|食物链|种群|群落|生物圈|生物多样性|遗传密码|基因表达/g;
+        if (biologyKeywords.test(normalizedQuestion)) {
+            topics.add('生物');
+        }
+        
+        // 英语相关关键词
+        const englishKeywords = /grammar|vocabulary|tense|reading|writing|speaking|listening|pronunciation|word|sentence|paragraph|essay|article|composition|translation|interpretation|dialogue|conversation|present|past|future|perfect|continuous|passive|active|irregular|regular|verb|noun|adjective|adverb|preposition|conjunction|phrase|clause/g;
+        if (englishKeywords.test(normalizedQuestion)) {
+            topics.add('英语');
+        }
+
+        // 如果没有匹配到任何主题，标记为"其他"
+        if (topics.size === 0) {
+            topics.add('其他');
+        }
+
+        console.log('分析结果:', Array.from(topics));
+        return Array.from(topics);
+    }
+
+    // 生成个性化建议
+    generateRecommendations(sessionId) {
+        try {
+            const sessionData = this.data.sessionAnalytics[sessionId];
+            if (!sessionData) return;
+
+            const recommendations = {
+                weakTopics: [],      // 需要加强的主题
+                suggestedResources: [], // 建议的学习资源
+                learningPath: [],    // 学习路径建议
+                timeManagement: []   // 时间管理建议
+            };
+
+            // 1. 分析薄弱主题
+            const topicFrequency = {};
+            sessionData.questions.forEach(q => {
+                const topics = this.analyzeTopics(q.question);
+                topics.forEach(topic => {
+                    topicFrequency[topic] = (topicFrequency[topic] || 0) + 1;
+                });
+            });
+
+            // 找出提问最多的主题作为薄弱项
+            const sortedTopics = Object.entries(topicFrequency)
+                .sort(([,a], [,b]) => b - a);
+            
+            if (sortedTopics.length > 0) {
+                recommendations.weakTopics.push({
+                    topic: sortedTopics[0][0],
+                    message: `建议加强 ${sortedTopics[0][0]} 的学习，这是你最常问到的主题。`
+                });
+            }
+
+            // 2. 根据主题推荐学习资源
+            recommendations.suggestedResources = this.getResourceRecommendations(sortedTopics.map(([topic]) => topic));
+
+            // 3. 生成学习路径建议
+            recommendations.learningPath = this.generateLearningPath(sortedTopics.map(([topic]) => topic));
+
+            // 4. 时间管理建议
+            const questionTimes = sessionData.questions.map(q => q.timestamp);
+            if (questionTimes.length >= 2) {
+                const timeGaps = [];
+                for (let i = 1; i < questionTimes.length; i++) {
+                    timeGaps.push(questionTimes[i] - questionTimes[i-1]);
+                }
+                const avgTimeGap = timeGaps.reduce((a,b) => a + b, 0) / timeGaps.length;
+                
+                if (avgTimeGap < 5 * 60 * 1000) { // 5分钟
+                    recommendations.timeManagement.push(
+                        "建议在提问之间留出更多时间进行独立思考和练习。"
+                    );
+                }
+            }
+
+            // 保存建议
+            this.data.personalRecommendations[sessionId] = recommendations;
+            this.saveData();
+
+        } catch (error) {
+            console.error('生成建议时出错:', error);
+        }
+    }
+
+    // 获取资源推荐
+    getResourceRecommendations(topics) {
+        const recommendations = [];
+        const resourceMap = {
+            '数学': [
+                '可汗学院的数学课程视频',
+                '数学分析习题集',
+                '高等数学辅导资料'
+            ],
+            '物理': [
+                '物理实验模拟软件',
+                '力学练习题集',
+                '物理公式速查手册'
+            ],
+            '化学': [
+                '化学实验安全指南',
+                '元素周期表学习工具',
+                '化学方程式配平练习'
+            ],
+            '生物': [
+                '细胞结构3D模型',
+                '生物学实验报告范例',
+                '基因遗传规律练习题'
+            ],
+            '英语': [
+                '英语听力训练材料',
+                '语法练习题集',
+                '口语练习应用推荐'
+            ]
+        };
+
+        topics.forEach(topic => {
+            if (resourceMap[topic]) {
+                recommendations.push({
+                    topic: topic,
+                    resources: resourceMap[topic]
+                });
+            }
+        });
+
+        return recommendations;
+    }
+
+    // 生成学习路径建议
+    generateLearningPath(topics) {
+        const pathMap = {
+            '数学': [
+                '1. 复习基础概念和定义',
+                '2. 练习基础题型',
+                '3. 尝试解决综合题',
+                '4. 总结解题方法和技巧'
+            ],
+            '物理': [
+                '1. 理解物理概念',
+                '2. 掌握公式推导',
+                '3. 练习典型题目',
+                '4. 进行实验验证'
+            ],
+            '化学': [
+                '1. 记忆基本概念',
+                '2. 理解反应原理',
+                '3. 练习方程式书写',
+                '4. 进行实验操作'
+            ],
+            '生物': [
+                '1. 学习基础知识',
+                '2. 理解生命过程',
+                '3. 观察实验现象',
+                '4. 总结规律特点'
+            ],
+            '英语': [
+                '1. 扩充词汇量',
+                '2. 强化语法基础',
+                '3. 提高听说能力',
+                '4. 练习阅读写作'
+            ]
+        };
+
+        const learningPath = [];
+        topics.forEach(topic => {
+            if (pathMap[topic]) {
+                learningPath.push({
+                    topic: topic,
+                    steps: pathMap[topic]
+                });
+            }
+        });
+
+        return learningPath;
+    }
+
+    // 获取学习报告
+    getLearningReport(sessionId) {
+        console.log('获取学习报告，会话ID:', sessionId);
+        try {
+            const sessionData = this.data.sessionAnalytics[sessionId];
+            console.log('会话数据:', sessionData);
+            
+            // 如果没有会话数据，创建默认数据
+            if (!sessionData) {
+                console.log('没有找到会话数据，创建默认报告');
+                return {
+                    sessionDuration: 0,
+                    questionCount: 0,
+                    topics: [],
+                    recommendations: {
+                        weakTopics: [],
+                        suggestedResources: [],
+                        learningPath: [],
+                        timeManagement: ['开始提问以获取学习建议']
+                    },
+                    lastActive: Date.now()
+                };
+            }
+
+            // 确保topics是Set对象
+            if (!(sessionData.topics instanceof Set)) {
+                console.log('转换topics为Set');
+                sessionData.topics = new Set(Array.from(sessionData.topics || []));
+            }
+
+            // 如果没有推荐数据，生成新的推荐
+            if (!this.data.personalRecommendations[sessionId]) {
+                console.log('生成新的推荐数据');
+                this.generateRecommendations(sessionId);
+            }
+
+            const recommendations = this.data.personalRecommendations[sessionId] || {
+                weakTopics: [],
+                suggestedResources: [],
+                learningPath: [],
+                timeManagement: []
+            };
+
+            console.log('返回报告数据');
+            return {
+                sessionDuration: Date.now() - sessionData.startTime,
+                questionCount: sessionData.questions.length,
+                topics: Array.from(sessionData.topics),
+                recommendations: recommendations,
+                lastActive: sessionData.lastActive
+            };
+        } catch (error) {
+            console.error('获取学习报告时出错:', error);
+            return {
+                sessionDuration: 0,
+                questionCount: 0,
+                topics: [],
+                recommendations: {
+                    weakTopics: [],
+                    suggestedResources: [],
+                    learningPath: [],
+                    timeManagement: ['暂时无法获取学习数据']
+                },
+                lastActive: Date.now()
+            };
+        }
+    }
+
+    // 显示学习报告
+    displayLearningReport(sessionId) {
+        console.log('开始生成学习报告，会话ID:', sessionId);
+        try {
+            const report = this.getLearningReport(sessionId);
+            console.log('获取到的报告数据:', report);
+
+            // 创建模态框容器
+            const modalDiv = document.createElement('div');
+            modalDiv.className = 'report-modal';
+            modalDiv.style.cssText = `
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background-color: rgba(0, 0, 0, 0.5);
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                z-index: 10000;
+            `;
+
+            // 生成报告内容
+            const content = document.createElement('div');
+            content.className = 'report-modal-content';
+            content.style.cssText = `
+                background-color: white;
+                padding: 20px;
+                border-radius: 8px;
+                max-width: 800px;
+                width: 90%;
+                max-height: 90vh;
+                overflow-y: auto;
+                position: relative;
+                box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            `;
+
+            // 添加关闭按钮
+            const closeButton = document.createElement('button');
+            closeButton.innerHTML = '&times;';
+            closeButton.className = 'close-button';
+            closeButton.style.cssText = `
+                position: absolute;
+                right: 10px;
+                top: 10px;
+                font-size: 24px;
+                cursor: pointer;
+                background: none;
+                border: none;
+                color: #666;
+            `;
+
+            // 获取提问历史
+            const questions = this.data.sessionAnalytics[sessionId]?.questions || [];
+            const questionsList = questions.map(q => ({
+                question: q.question,
+                timestamp: new Date(q.timestamp).toLocaleString(),
+                topics: q.topics || []
+            }));
+
+            // 生成报告HTML
+            const reportContent = document.createElement('div');
+            reportContent.className = 'learning-report';
+            reportContent.innerHTML = `
+                <h3 style="margin-bottom: 20px; color: #333;">学习报告</h3>
+                
+                <div class="report-section" style="margin-bottom: 20px; padding: 15px; background: #f8f9fa; border-radius: 8px;">
+                    <h4 style="color: #1a73e8; margin-bottom: 15px;">学习概况</h4>
+                    <p>学习时长: ${this.formatDuration(report.sessionDuration)}</p>
+                    <p>提问数量: ${report.questionCount}题</p>
+                </div>
+
+                <div class="report-section" style="margin-bottom: 20px; padding: 15px; background: #f8f9fa; border-radius: 8px;">
+                    <h4 style="color: #1a73e8; margin-bottom: 15px;">提问历史</h4>
+                    <div style="max-height: 300px; overflow-y: auto;">
+                        ${questionsList.map(q => `
+                            <div style="margin-bottom: 15px; padding: 10px; background: white; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                                <p style="margin: 0; color: #666; font-size: 0.9em;">${q.timestamp}</p>
+                                <p style="margin: 5px 0; color: #333;">${q.question}</p>
+                                <p style="margin: 0; color: #666; font-size: 0.9em;">主题: ${q.topics.join(', ') || '未分类'}</p>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+
+                <div class="report-section" style="margin-bottom: 20px; padding: 15px; background: #f8f9fa; border-radius: 8px;">
+                    <h4 style="color: #1a73e8; margin-bottom: 15px;">需要加强的主题</h4>
+                    <div id="improvement-suggestions" style="min-height: 50px;">
+                        <p style="color: #666;">正在分析学习数据...</p>
+                    </div>
+                </div>
+            `;
+
+            // 组装模态框
+            content.appendChild(closeButton);
+            content.appendChild(reportContent);
+            modalDiv.appendChild(content);
+
+            // 添加到body
+            document.body.appendChild(modalDiv);
+            console.log('模态框已添加到DOM');
+
+            // 获取主题建议
+            this.fetchImprovementSuggestions(sessionId, questionsList).then(suggestions => {
+                const suggestionsDiv = document.getElementById('improvement-suggestions');
+                if (suggestionsDiv) {
+                    suggestionsDiv.innerHTML = suggestions;
+                }
+            });
+
+            // 添加关闭事件
+            closeButton.onclick = () => {
+                console.log('关闭按钮被点击');
+                document.body.removeChild(modalDiv);
+            };
+
+            // 点击模态框外部关闭
+            modalDiv.onclick = (e) => {
+                if (e.target === modalDiv) {
+                    console.log('点击模态框外部，关闭模态框');
+                    document.body.removeChild(modalDiv);
+                }
+            };
+
+            console.log('学习报告显示完成');
+        } catch (error) {
+            console.error('显示学习报告时出错:', error);
+            showSystemMessage('显示学习报告时出错: ' + error.message, 'error');
+        }
+    }
+
+    // 获取主题改进建议
+    async fetchImprovementSuggestions(sessionId, questionsList) {
+        try {
+            const response = await fetch('/chat/stream', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    question: `基于以下学习历史，请分析我需要加强哪些主题，并给出具体的改进建议：\n${
+                        questionsList.map(q => `问题：${q.question}\n时间：${q.timestamp}\n主题：${q.topics.join(', ')}\n`).join('\n')
+                    }`,
+                    sessionId: sessionId
+                })
+            });
+
+            if (!response.ok) {
+                throw new Error('获取建议失败');
+            }
+
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let buffer = '';
+            let suggestions = '';
+            let messageContainer = null;
+
+            while (true) {
+                const {value, done} = await reader.read();
+                if (done) break;
+
+                buffer += decoder.decode(value, {stream: true});
+                const lines = buffer.split('\n');
+                buffer = lines.pop() || '';
+
+                for (const line of lines) {
+                    if (!line.trim()) continue;
+
+                    if (line.startsWith('data:')) {
+                        try {
+                            const data = line.slice(5).trim();
+                            
+                            // 如果是[DONE]标记，结束处理
+                            if (data === '[DONE]') {
+                                console.log('收到[DONE]标记，处理完成');
+                                continue;
+                            }
+                            
+                            // 尝试解析JSON数据
+                            const jsonData = JSON.parse(data);
+                            
+                            if (jsonData && jsonData.content !== undefined) {
+                                suggestions += jsonData.content;
+                                
+                                // 使用marked处理Markdown格式
+                                const suggestionsDiv = document.getElementById('improvement-suggestions');
+                                if (suggestionsDiv) {
+                                    try {
+                                        // 保护数学公式
+                                        const mathExpressions = [];
+                                        let mathIndex = 0;
+
+                                        // 临时替换数学公式
+                                        const contentWithPlaceholders = suggestions.replace(/(\$\$[\s\S]*?\$\$|\$[^\$\n]+\$|\\begin\{[^}]+\}[\s\S]*?\\end\{[^}]+\}|\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\))/g, (match) => {
+                                            mathExpressions.push(match);
+                                            return `%%MATH_EXPR_${mathIndex++}%%`;
+                                        });
+
+                                        // 使用marked渲染Markdown
+                                        let htmlContent = marked.parse(contentWithPlaceholders);
+
+                                        // 恢复数学公式
+                                        htmlContent = htmlContent.replace(/%%MATH_EXPR_(\d+)%%/g, (_, index) => mathExpressions[index]);
+
+                                        suggestionsDiv.innerHTML = htmlContent;
+
+                                        // 触发MathJax重新渲染
+                                        if (window.MathJax && window.MathJax.typesetPromise) {
+                                            window.MathJax.typesetPromise([suggestionsDiv]).catch((err) => {
+                                                console.error('MathJax渲染错误:', err);
+                                            });
+                                        }
+                                    } catch (renderError) {
+                                        console.error('渲染建议内容时出错:', renderError);
+                                        suggestionsDiv.innerHTML = suggestions; // 降级为纯文本显示
+                                    }
+                                }
+                            }
+                        } catch (jsonError) {
+                            console.warn('解析JSON数据时出错，尝试继续处理:', jsonError);
+                            continue;
+                        }
+                    }
+                }
+            }
+
+            return suggestions || '暂无具体改进建议';
+        } catch (error) {
+            console.error('获取改进建议时出错:', error);
+            return '获取改进建议时出错，请稍后再试';
+        }
+    }
+
+    // 格式化持续时间
+    formatDuration(ms) {
+        const seconds = Math.floor(ms / 1000);
+        const minutes = Math.floor(seconds / 60);
+        const hours = Math.floor(minutes / 60);
+
+        if (hours > 0) {
+            return `${hours}小时${minutes % 60}分钟`;
+        } else if (minutes > 0) {
+            return `${minutes}分钟`;
+        } else {
+            return `${seconds}秒`;
+        }
+    }
+}
+
+// 导出学习分析器实例
+window.learningAnalytics = new LearningAnalytics();
+
 document.addEventListener('DOMContentLoaded', () => {
     // 获取必要的DOM元素
     const elements = {
@@ -28,7 +667,8 @@ document.addEventListener('DOMContentLoaded', () => {
         addButton: document.getElementById('add-button'),
         uploadMenu: document.getElementById('upload-menu'),
         uploadFileOption: document.getElementById('upload-file-option'),
-        fileUpload: document.getElementById('file-upload')
+        fileUpload: document.getElementById('file-upload'),
+        showReportButton: document.getElementById('show-report')  // 添加学习报告按钮
     };
 
     // 用于存储聊天历史的键
@@ -745,42 +1385,26 @@ document.addEventListener('DOMContentLoaded', () => {
         event.preventDefault();
         const question = elements.messageInput.value.trim();
         
-        // 检查消息是否为空
-        if (!question) {
-            // 消息为空，不提交
-            console.log('消息为空，不提交');
-            // 针对移动设备，添加振动反馈（如果支持）
-            if (navigator.vibrate) {
-                navigator.vibrate(100); // 轻微振动100毫秒
-            }
-            return; // 直接返回，不执行后续代码
-        }
+        if (!question) return;
         
-            // 立即清空并重置输入框
-            elements.messageInput.value = '';
-            elements.messageInput.style.height = 'auto';
-            elements.messageInput.style.height = `${Math.min(elements.messageInput.scrollHeight, 200)}px`;
-            
-            // 禁用输入和发送按钮
-            setInputState(false);
-            
-            try {
-            // 如果这是第一条消息，用它来设置对话标题
-            const isFirstMessage = elements.chatMessages.children.length === 0;
-            
-            // 发送消息
-                await askQuestionStreamPost(question);
-            
-            // 如果是第一条消息，将其作为对话标题
-            if (isFirstMessage) {
-                // 使用前20个字符作为标题，如果超过20字符则添加省略号
-                const title = question.length > 20 ? question.substring(0, 20) + '...' : question;
-                updateChatTitle(title);
+        try {
+            // 记录问题到学习分析系统
+            if (window.learningAnalytics) {
+                window.learningAnalytics.recordQuestion(question, sessionId);
             }
+            
+            // 原有的提交逻辑
+            setInputState(false);
+            elements.messageInput.value = '';
+            adjustTextareaHeight(elements.messageInput);
+            
+                await askQuestionStreamPost(question);
             } catch (error) {
-                console.error('发送消息时出错:', error);
-                showSystemMessage('发送消息失败，请重试', 'error');
+            console.error('提交问题时出错:', error);
+            showErrorMessage(error);
+        } finally {
                 setInputState(true);
+            focusInput();
         }
     }
 
@@ -1931,7 +2555,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const reader = response.body.getReader();
             const decoder = new TextDecoder();
             let buffer = '';
-            let lastContent = ''; // 用于保存最后的内容
+            let fullContent = ''; // 用于累积完整的内容
             
             while (true) {
                 const {value, done} = await reader.read();
@@ -1945,51 +2569,87 @@ document.addEventListener('DOMContentLoaded', () => {
                 buffer = lines.pop() || '';
                 
                 for (const line of lines) {
-                    if (line.trim() === '') continue;
+                    if (!line.trim()) continue;
                     
+                    // 处理事件流格式
                     if (line.startsWith('data:')) {
                         try {
-                            const eventData = JSON.parse(line.slice(5));
+                            const data = line.slice(5).trim();
+                            
+                            // 检查是否是结束标记
+                            if (data === '[DONE]') {
+                                console.log('收到[DONE]标记');
+                                continue;
+                            }
+                            
+                            // 解析JSON数据
+                            const eventData = JSON.parse(data);
                             
                             if (eventData.error) {
                                 updateSessionStatus(SessionStatus.ERROR, eventData);
                                 break;
                             }
                             
-                            if (eventData.type === 'done') {
-                                console.log('收到完成消息');
-                                // 不做任何清空操作，保持最后的内容
-                                continue;
-                            }
-                            
-                            // 更新内容
+                            // 累积内容
                             if (eventData.content) {
-                                lastContent = eventData.content; // 保存最新的内容
-                                messageContainer.querySelector('.message-content').innerHTML = marked.parse(eventData.content);
-                                
-                                // 渲染数学公式
-                                if (typeof renderMathInElement === 'function') {
-                                    renderMathInElement(messageContainer.querySelector('.message-content'), {
-                                        delimiters: [
-                                            {left: '$$', right: '$$', display: true},
-                                            {left: '$', right: '$', display: false},
-                                            {left: '\\(', right: '\\)', display: false},
-                                            {left: '\\[', right: '\\]', display: true}
-                                        ],
-                                        throwOnError: false
-                                    });
+                                fullContent += eventData.content;
+                                try {
+                                    // 实时渲染累积的内容
+                                    const renderedContent = marked.parse(fullContent);
+                                    messageContainer.querySelector('.message-content').innerHTML = renderedContent;
+                                    
+                                    // 实时渲染数学公式
+                                    if (typeof renderMathInElement === 'function') {
+                                        renderMathInElement(messageContainer.querySelector('.message-content'), {
+                                            delimiters: [
+                                                {left: '$$', right: '$$', display: true},
+                                                {left: '$', right: '$', display: false},
+                                                {left: '\\(', right: '\\)', display: false},
+                                                {left: '\\[', right: '\\]', display: true}
+                                            ],
+                                            throwOnError: false
+                                        });
+                                    }
+                                } catch (renderError) {
+                                    console.error('渲染内容时出错:', renderError);
                                 }
                             }
                         } catch (e) {
-                            console.error('解析消息时出错:', e);
+                            console.error('处理数据时出错:', e);
+                            if (e instanceof SyntaxError) {
+                                console.log('JSON解析失败的原始数据:', line);
+                            }
                         }
                     }
                 }
             }
             
-            // 确保显示最后的内容
-            if (lastContent) {
-                messageContainer.querySelector('.message-content').innerHTML = marked.parse(lastContent);
+            // 处理剩余的buffer中的数据
+            if (buffer.trim()) {
+                const lines = buffer.split('\n');
+                for (const line of lines) {
+                    if (line.startsWith('data:')) {
+                        try {
+                            const data = line.slice(5).trim();
+                            if (data === '[DONE]') continue;
+                            
+                            const eventData = JSON.parse(data);
+                            if (eventData.content) {
+                                fullContent += eventData.content;
+                            }
+                        } catch (e) {
+                            console.error('处理剩余数据时出错:', e);
+                        }
+                    }
+                }
+            }
+            
+            // 最终渲染
+            console.log('准备渲染最终内容:', fullContent);
+            try {
+                const finalRenderedContent = marked.parse(fullContent);
+                messageContainer.querySelector('.message-content').innerHTML = finalRenderedContent;
+                
                 // 最后一次渲染数学公式
                 if (typeof renderMathInElement === 'function') {
                     renderMathInElement(messageContainer.querySelector('.message-content'), {
@@ -2002,6 +2662,10 @@ document.addEventListener('DOMContentLoaded', () => {
                         throwOnError: false
                     });
                 }
+            } catch (renderError) {
+                console.error('最终渲染内容时出错:', renderError);
+                // 如果渲染失败，显示原始内容
+                messageContainer.querySelector('.message-content').textContent = fullContent;
             }
             
             // 滚动到底部
@@ -2137,5 +2801,34 @@ document.addEventListener('DOMContentLoaded', () => {
 			console.error('初始化失败:', error);
 			showSystemMessage('初始化失败，请刷新页面重试', 'error');
 		}
+    }
+
+    // 添加学习报告按钮事件监听
+    if (elements.showReportButton) {
+        console.log('添加学习报告按钮事件监听器');
+        elements.showReportButton.addEventListener('click', function() {
+            console.log('学习报告按钮被点击');
+            try {
+                if (!sessionId) {
+                    console.error('无法获取会话ID');
+                    showSystemMessage('无法获取会话ID，请确保您在有效的聊天会话中', 'error');
+                    return;
+                }
+                
+                console.log('当前会话ID:', sessionId);
+                if (window.learningAnalytics) {
+                    window.learningAnalytics.displayLearningReport(sessionId);
+                } else {
+                    console.error('学习分析模块未加载');
+                    showSystemMessage('学习分析功能未准备就绪，请刷新页面后重试', 'error');
+                }
+            } catch (error) {
+                console.error('显示学习报告时出错:', error);
+                showSystemMessage('显示学习报告时出错: ' + error.message, 'error');
+            }
+        });
+        console.log('学习报告按钮事件监听器添加完成');
+    } else {
+        console.warn('未找到学习报告按钮元素');
     }
 });

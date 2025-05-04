@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DeepSeek Chat</title>
+    <link rel="stylesheet" href="/chat/css/style.css">
+    <link rel="stylesheet" href="/chat/css/learning-analytics.css">
+    <!-- ... 其他样式和脚本引用 ... -->
+</head>
+<body>
+    <!-- ... 其他HTML内容 ... -->
+    
+    <!-- 添加学习报告按钮 -->
+    <div class="toolbar">
+        <button id="show-report" class="toolbar-button" title="查看学习报告">
+            📊 学习报告
+        </button>
+        <!-- ... 其他工具栏按钮 ... -->
+    </div>
+
+    <!-- ... 其他HTML内容 ... -->
+
+    <!-- 添加学习分析脚本 -->
+    <script src="/chat/js/learning-analytics.js"></script>
+    <script>
+        // 添加学习报告按钮事件监听
+        document.getElementById('show-report').addEventListener('click', () => {
+            if (window.learningAnalytics) {
+                window.learningAnalytics.displayLearningReport(sessionId);
+            }
+        });
+    </script>
+</body>
+</html> 
