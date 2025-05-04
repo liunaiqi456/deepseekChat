@@ -62,7 +62,7 @@ public class ChatServiceImpl implements ChatService {
             + "- 多使用类比和比喻\n"
             + "- 适时提供简单的图表或示意\n"
             + "- 鼓励互动和提问\n"
-            + "- 所有回答都应基于可靠来源，并提供引用和参考链接。";
+            + "- 所有回答都应基于可靠来源，并提供引用和参考链接。数学题要分步骤解答，输出对这道题的思考判断过程。";
     
     private final Map<String, WebSocketSession> sessions = new ConcurrentHashMap<>();
 

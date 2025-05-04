@@ -23,22 +23,19 @@
                 </div>
                 
                 <!-- 上传功能下拉菜单 -->
-                <div id="upload-menu" class="upload-menu" style="z-index: 9999; display: none;">
-                    <div class="upload-option">
-                        <img src="/chat/img/google-drive.svg" alt="Google Drive" width="24" height="24">
-                        <span>连接到Google Drive</span>
-                    </div>
-                    <div class="upload-option">
-                        <img src="/chat/img/onedrive-personal.svg" alt="OneDrive个人版" width="24" height="24">
-                        <span>连接到Microsoft OneDrive (个人)</span>
-                    </div>
-                    <div class="upload-option">
-                        <img src="/chat/img/onedrive-business.svg" alt="OneDrive企业版" width="24" height="24">
-                        <span>连接到Microsoft OneDrive (工作/学校)</span>
-                        <small>包括SharePoint</small>
+                <div id="upload-menu" class="upload-menu" style="z-index: 9999;">
+                    <div class="upload-option" data-type="homework">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
+                            <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
+                            <path d="M8 7h8"></path>
+                            <path d="M8 11h8"></path>
+                            <path d="M8 15h8"></path>
+                        </svg>
+                        <span>上传作业</span>
                     </div>
                     <div class="upload-divider"></div>
-                    <div class="upload-option" id="upload-file-option">
+                    <div class="upload-option" data-type="file" id="upload-file-option">
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
                             <polyline points="17 8 12 3 7 8"></polyline>

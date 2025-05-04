@@ -1,3 +1,19 @@
+// VConsole初始化
+let vConsole = null;
+try {
+    if (typeof VConsole !== 'undefined') {
+        vConsole = new VConsole({
+            defaultPlugins: ['system', 'network', 'element', 'storage'],
+            maxLogNumber: 1000,
+            onReady: function() {
+                console.log('VConsole is ready.');
+            }
+        });
+    }
+} catch (error) {
+    console.warn('VConsole initialization failed:', error);
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     // 获取必要的DOM元素
     const elements = {
@@ -279,6 +295,13 @@ document.addEventListener('DOMContentLoaded', () => {
 		showSystemMessage('正在加载必要组件...', 'info');
 
 		try {
+			// 检测是否为移动设备
+			const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+			if (isMobile) {
+				console.log('检测到移动设备');
+				initMobileDebug();
+			}
+			
 			// 加载外部资源
 			await loadExternalResources();
 
@@ -324,6 +347,32 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // 设置上传菜单事件
         setupUploadMenu();
+        
+        // 设置作业上传事件监听
+        const uploadHomeworkOption = document.querySelector('.upload-option[data-type="homework"]');
+        if (uploadHomeworkOption) {
+            console.log('找到作业上传选项元素');
+            const homeworkInput = document.createElement('input');
+            homeworkInput.type = 'file';
+            homeworkInput.multiple = true;
+            homeworkInput.accept = 'image/*';
+            homeworkInput.style.display = 'none';
+            document.body.appendChild(homeworkInput);
+            
+            uploadHomeworkOption.addEventListener('click', () => {
+                console.log('作业上传选项被点击');
+                hideUploadMenu();
+                homeworkInput.click();
+            });
+            
+            homeworkInput.addEventListener('change', (e) => {
+                console.log('选择了作业文件:', e.target.files);
+                handleHomeworkUpload(e.target.files);
+                homeworkInput.value = ''; // 清空选择，允许重复选择相同文件
+            });
+        } else {
+            console.warn('未找到作业上传选项元素');
+        }
 
 			// 所有初始化完成后启用输入框，但保持发送按钮禁用状态（直到有输入）
 			setInputState(true);
@@ -571,12 +620,19 @@ document.addEventListener('DOMContentLoaded', () => {
     // 发送消息并获取流式响应（POST方式）
 	async function askQuestionStreamPost(question, retryCount = 3) {
         try {
-            // 显示用户的问题（添加到当前对话中，不清空已有内容）
+            // 参数验证
+            if (!question || typeof question !== 'string') {
+                throw new Error('无效的问题格式');
+            }
+
+            // 只在第一次尝试时显示用户消息，避免重复显示
+            if (retryCount === 3) {
             addMessage(question, 'user');
+            }
             
             // 禁用输入，表示正在处理
             setInputState(false);
-            showSystemMessage('正在思考...', 'info');
+            showSystemMessage(retryCount === 3 ? '正在思考...' : `正在重试(${3-retryCount}/3)...`, retryCount === 3 ? 'info' : 'warning');
             
             // 发送请求
             const response = await fetch('/chat/stream', {
@@ -586,135 +642,101 @@ document.addEventListener('DOMContentLoaded', () => {
                 },
                 body: JSON.stringify({ 
                     question: question,
-                    sessionId: sessionId
+                    sessionId: sessionId || ''  // 确保sessionId不为undefined
                 })
             });
 
-			// 处理HTTP错误
+            // 处理HTTP错误
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
 
-			// 获取响应的文本流
+            // 获取响应的文本流
             const reader = response.body.getReader();
             const decoder = new TextDecoder();
             let messageContainer = null;
-			let currentMessage = '';
-			let buffer = '';
+            let currentMessage = '';
+            let buffer = '';
 
-			// 读取流
+            // 读取流
             while (true) {
-                const { value, done } = await reader.read();
+                const {value, done} = await reader.read();
+                
+                if (done) {
+                    console.log('流读取完成');
+                    break;
+                }
 
-				if (done) {
-					console.log('流读取完成');
-					break;
-				}
+                // 解码新的数据块
+                const chunk = decoder.decode(value, {stream: true});
+                if (!chunk) continue;  // 跳过空块
+                
+                buffer += chunk;
 
-				// 解码新的数据块
-				const chunk = decoder.decode(value, { stream: true });
-				buffer += chunk;
-
-				try {
-					// 按行分割并处理每一行
+                try {
+                    // 按行分割并处理每一行
                 const lines = buffer.split('\n');
-					buffer = lines.pop() || ''; // 保存不完整的最后一行
+                buffer = lines.pop() || '';
 
-					for (const line of lines) {
-						if (!line.trim()) continue;  // 跳过空行
+                    for (const line of lines) {
+                        if (!line || !line.trim()) continue;  // 跳过空行
 
-						// 处理data行
-						if (line.startsWith('data:')) {
-							const data = line.slice(5).trim();
+                        // 处理data行
+                        if (line.startsWith('data:')) {
+                            const data = line.slice(5).trim();
                     
                     // 如果是[DONE]标记，结束处理
-							if (data === '[DONE]') {
+                            if (data === '[DONE]') {
                         console.log('收到[DONE]标记，处理完成');
                         continue;
                     }
                     
-							// 尝试解析JSON数据
-							try {
-								const jsonData = JSON.parse(data);
-								if (jsonData.content !== undefined) {  // 检查content是否存在
-									// 创建消息容器（如果还没有）
+                            // 尝试解析JSON数据
+                            try {
+                                const jsonData = JSON.parse(data);
+                                
+                                // 创建消息容器（如果还没有）
                             if (!messageContainer) {
-										messageContainer = createMessageElement('assistant', '');
-										elements.chatMessages.appendChild(messageContainer);
-									}
-									// 提取实际内容
-									const content = typeof jsonData.content === 'string'
-										? jsonData.content
-										: JSON.stringify(jsonData.content);
+                                    messageContainer = createMessageElement('assistant', '');
+                                    if (elements.chatMessages) {
+                                        elements.chatMessages.appendChild(messageContainer);
+                                    }
+                                }
 
-									currentMessage += content;
-									// 使用原有的updateMessageDisplay函数来保持渲染功能
-									updateMessageDisplay(messageContainer, currentMessage);
-								}
-							} catch (jsonError) {
-								console.warn('JSON解析失败，尝试提取content字段');
-								// 使用正则表达式提取content字段的值
-								const contentMatch = data.match(/"content"\s*:\s*"([^"]*?)(?<!\\)"/);
-								if (contentMatch && contentMatch[1]) {
-									if (!messageContainer) {
-										messageContainer = createMessageElement('assistant', '');
-										elements.chatMessages.appendChild(messageContainer);
-									}
-									const content = contentMatch[1]
-										.replace(/\\"/g, '"')
-										.replace(/\\\\/g, '\\')
-										.replace(/\\n/g, '\n')
-										.replace(/\\r/g, '\r')
-										.replace(/\\t/g, '\t');
-
-									currentMessage += content;
-									updateMessageDisplay(messageContainer, currentMessage);
-								} else {
-									// 如果无法提取content，尝试直接使用data
-									if (!messageContainer) {
-										messageContainer = createMessageElement('assistant', '');
-										elements.chatMessages.appendChild(messageContainer);
-									}
-									currentMessage += data;
-									updateMessageDisplay(messageContainer, currentMessage);
-								}
-							}
-						} else if (line.includes('event:') || line.includes('id:')) {
-							// 忽略事件和ID行
-							continue;
-						} else {
-							// 处理其他行
-							if (!messageContainer) {
-								messageContainer = createMessageElement('assistant', '');
-								elements.chatMessages.appendChild(messageContainer);
-							}
-							currentMessage += line + '\n';
-							updateMessageDisplay(messageContainer, currentMessage);
+                                // 更新消息内容
+                                if (jsonData && jsonData.content !== undefined) {
+                                    currentMessage += jsonData.content;
+                                    if (messageContainer) {
+                                        updateMessageDisplay(messageContainer, currentMessage);
+                                    }
+                                }
+                            } catch (jsonError) {
+                                console.warn('JSON解析失败:', jsonError);
+                    }
                 }
             }
         } catch (error) {
-					console.error('处理消息时出错:', error);
-					if (messageContainer) {
-						updateMessageContent(messageContainer, '处理消息时发生错误，请重试。', true);
-					}
-				}
-			}
+                    console.error('处理消息时出错:', error);
+                }
+            }
 
             setInputState(true);
-			showSystemMessage('处理完成', 'success');
+            showSystemMessage('处理完成', 'success');
 
         } catch (error) {
-			console.error('请求出错:', error);
-			showSystemMessage(error.message, 'error');
+            console.error('请求出错:', error);
+            showSystemMessage(error.message, 'error');
 
-			if (retryCount > 0) {
-				console.log(`还剩 ${retryCount} 次重试机会`);
-				showSystemMessage('正在重试...', 'warning');
-				// 注意：重试时也不应清空已有对话
-				return askQuestionStreamPost(question, retryCount - 1);
-			}
+            if (retryCount > 0) {
+                console.log(`还剩 ${retryCount} 次重试机会`);
+                // 等待一段时间再重试，时间随重试次数增加
+                const delay = (3 - retryCount + 1) * 1000;
+                await new Promise(resolve => setTimeout(resolve, delay));
+                return askQuestionStreamPost(question, retryCount - 1);
+            }
 
-			setInputState(true);
+            setInputState(true);
+            showSystemMessage('重试次数已用完，请重新发送消息', 'error');
         }
     }
 
@@ -1154,36 +1176,43 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        // 获取当前主机和端口
-        const currentHost = window.location.hostname;
-        const socketPort = '8081'; // Socket.IO 服务器端口
-
         try {
-            console.log(`尝试连接Socket.IO服务器: ${currentHost}:${socketPort}`);
-            const socket = io(`http://${currentHost}:${socketPort}`, {
-				transports: ['websocket'],           // 只使用WebSocket
-				upgrade: false,                      // 禁用传输升级
-				reconnectionAttempts: 5,             // 重连次数
-				reconnectionDelay: 1000,             // 重连延迟
-				timeout: 20000,                      // 超时时间
+            // 获取当前主机和协议
+            const protocol = window.location.protocol;
+        const currentHost = window.location.hostname;
+            const socketPort = '8081';
+            const wsProtocol = protocol === 'https:' ? 'wss:' : 'ws:';
+            
+            console.log(`尝试连接Socket.IO服务器: ${currentHost}:${socketPort}, 协议: ${wsProtocol}`);
+            
+            const socket = io(`${protocol}//${currentHost}:${socketPort}`, {
+                transports: ['websocket'],
+                upgrade: false,
+                reconnectionAttempts: 5,
+                reconnectionDelay: 1000,
+                timeout: 20000,
                 forceNew: true,
-				path: '/socket.io/',                 // 注意这里加了末尾的斜杠
-				withCredentials: true                // 允许跨域认证
+                path: '/socket.io/',
+                withCredentials: true,
+                secure: protocol === 'https:',
+                rejectUnauthorized: false,
+                extraHeaders: {
+                    'Origin': window.location.origin
+                }
             });
 
             // 添加连接事件监听
             socket.on('connect_error', (error) => {
                 console.error('连接错误:', error);
                 if (error.message.includes('xhr poll error')) {
-                    // 如果是轮询错误，尝试切换到 WebSocket
                     socket.io.opts.transports = ['websocket'];
                 }
-                showSystemMessage(`无法连接到实时通讯服务器，但基本功能仍然可用`, 'warning');
+                showSystemMessage(`无法连接到实时通讯服务器: ${error.message}`, 'warning');
             });
 
             socket.io.on('error', (error) => {
                 console.error('传输错误:', error);
-                showSystemMessage('网络连接不稳定，请检查网络设置', 'warning');
+                showSystemMessage(`网络连接不稳定: ${error.message}`, 'warning');
             });
 
             socket.io.on('reconnect_attempt', (attempt) => {
@@ -1196,31 +1225,28 @@ document.addEventListener('DOMContentLoaded', () => {
                 showSystemMessage('无法连接到服务器，但您仍然可以使用基本功能', 'warning');
             });
 
-            // 连接成功事件
             socket.on('connect', () => {
                 console.log('Connected to Socket.IO server');
                 showSystemMessage('已连接到实时通讯服务器', 'success');
                 setInputState(true);
             });
 
-            // 断开连接事件
             socket.on('disconnect', (reason) => {
                 console.log('Disconnected:', reason);
-                showSystemMessage(`已断开连接，但基本功能仍然可用`, 'warning');
+                showSystemMessage(`连接断开: ${reason}`, 'warning');
             });
 
-            // 重连成功事件
             socket.on('reconnect', (attemptNumber) => {
                 console.log('Reconnected after', attemptNumber, 'attempts');
                 showSystemMessage('重新连接成功', 'success');
             });
 
-            window.chatSocket = socket; // 存储socket以便其他函数访问
+            window.chatSocket = socket;
             return socket;
 
         } catch (error) {
-            console.error('Error initializing Socket.IO:', error);
-            showSystemMessage('实时通讯连接初始化失败，但基本功能仍然可用', 'warning');
+            console.error('初始化Socket.IO时出错:', error);
+            showSystemMessage(`实时通讯初始化失败: ${error.message}`, 'warning');
             return null;
         }
     }
@@ -1581,12 +1607,25 @@ document.addEventListener('DOMContentLoaded', () => {
         // 发送文件到服务器
         fetch('/chat/upload', {
             method: 'POST',
+            headers: {
+                'Accept': 'application/json, text/plain, */*',
+                'X-Requested-With': 'XMLHttpRequest'
+            },
             body: formData
         })
         .then(response => {
             console.log('上传响应状态:', response.status);
             if (!response.ok) {
-                throw new Error('上传失败，HTTP状态码: ' + response.status);
+                // 根据不同的错误状态码提供更友好的错误信息
+                if (response.status === 406) {
+                    throw new Error('不支持的文件格式，请上传允许的文件类型');
+                } else if (response.status === 413) {
+                    throw new Error('文件太大，请选择小于10MB的文件');
+                } else if (response.status === 415) {
+                    throw new Error('不支持的文件类型');
+                } else {
+                    throw new Error('上传失败，请稍后重试');
+                }
             }
             return response.json();
         })
@@ -1611,7 +1650,7 @@ document.addEventListener('DOMContentLoaded', () => {
         })
         .catch(error => {
             console.error('文件上传错误:', error);
-            showSystemMessage('文件上传失败: ' + error.message, 'error');
+            showSystemMessage(error.message || '文件上传失败，请重试', 'error');
             // 重置文件输入框
             event.target.value = '';
         });
@@ -1630,36 +1669,473 @@ document.addEventListener('DOMContentLoaded', () => {
         const contentDiv = document.createElement('div');
         contentDiv.className = 'message-content';
         
-        // 根据文件类型显示不同的图标
+        // 根据文件类型显示不同的图标和处理方式
         const extension = fileName.split('.').pop().toLowerCase();
         let fileIcon = '📄'; // 默认文件图标
+        let contentHtml = '';
         
         if (['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'].includes(extension)) {
             fileIcon = '🖼️';
-        } else if (['doc', 'docx', 'rtf', 'txt'].includes(extension)) {
-            fileIcon = '📝';
-        } else if (['xls', 'xlsx', 'csv'].includes(extension)) {
-            fileIcon = '📊';
-        } else if (['ppt', 'pptx'].includes(extension)) {
-            fileIcon = '📽️';
+            contentHtml = `
+                <div class="file-attachment">
+                    <div class="file-preview">
+                        <img src="${fileUrl}" alt="${fileName}" style="max-width: 200px; max-height: 200px;">
+                    </div>
+                    <div class="file-info">
+                        <div class="file-name">${fileName}</div>
+                        <a href="${fileUrl}" target="_blank" class="file-download">查看原图</a>
+                    </div>
+                </div>
+            `;
         } else if (['pdf'].includes(extension)) {
             fileIcon = '📑';
-        } else if (['zip', 'rar', '7z', 'tar', 'gz'].includes(extension)) {
-            fileIcon = '🗜️';
+            contentHtml = `
+                <div class="file-attachment">
+                    <div class="file-icon">${fileIcon}</div>
+                    <div class="file-info">
+                        <div class="file-name">${fileName}</div>
+                        <a href="${fileUrl}" target="_blank" class="file-download">查看PDF</a>
+                    </div>
+                </div>
+            `;
+        } else {
+            contentHtml = `
+                <div class="file-attachment">
+                    <div class="file-icon">${fileIcon}</div>
+                    <div class="file-info">
+                        <div class="file-name">${fileName}</div>
+                        <a href="${fileUrl}" target="_blank" class="file-download">下载文件</a>
+                    </div>
+                </div>
+            `;
         }
         
-        contentDiv.innerHTML = `
-            <div class="file-attachment">
-                <div class="file-icon">${fileIcon}</div>
-                <div class="file-info">
-                    <div class="file-name">${fileName}</div>
-                    <a href="${fileUrl}" target="_blank" class="file-download">下载文件</a>
-                </div>
-            </div>
-        `;
-        
+        contentDiv.innerHTML = contentHtml;
         fileDiv.appendChild(contentDiv);
         return fileDiv;
     }
-});
 
+    // 添加会话状态跟踪
+    const SessionStatus = {
+        INITIALIZING: 'INITIALIZING',
+        PROCESSING: 'PROCESSING',
+        COMPLETED: 'COMPLETED',
+        ERROR: 'ERROR'
+    };
+
+    let currentSessionStatus = SessionStatus.INITIALIZING;
+    let lastError = null;
+
+    function updateSessionStatus(status, error = null) {
+        currentSessionStatus = status;
+        lastError = error;
+        
+        // 更新UI状态
+        const statusIndicator = document.querySelector('.status-indicator');
+        if (statusIndicator) {
+            statusIndicator.className = `status-indicator ${status.toLowerCase()}`;
+            statusIndicator.textContent = getStatusText(status);
+        }
+        
+        // 如果有错误，显示错误信息
+        if (error) {
+            showErrorMessage(error);
+        }
+    }
+
+    function getStatusText(status) {
+        switch (status) {
+            case SessionStatus.INITIALIZING:
+                return '初始化中...';
+            case SessionStatus.PROCESSING:
+                return '处理中...';
+            case SessionStatus.COMPLETED:
+                return '已完成';
+            case SessionStatus.ERROR:
+                return '出错了';
+            default:
+                return '未知状态';
+        }
+    }
+
+    function showErrorMessage(error) {
+        const errorContainer = document.querySelector('.error-container');
+        if (errorContainer) {
+            errorContainer.innerHTML = `
+                <div class="error-message">
+                    <h4>${error.errorType || '错误'}</h4>
+                    <p>${error.errorDescription || error.message || '发生未知错误'}</p>
+                    ${error.stackTrace ? `<pre class="error-stack">${error.stackTrace}</pre>` : ''}
+                </div>
+            `;
+            errorContainer.style.display = 'block';
+        }
+    }
+
+    // 处理作业上传
+    async function handleHomeworkUpload(files) {
+        try {
+            // 添加防御性检查
+            if (!files || typeof files !== 'object') {
+                console.error('文件对象无效:', files);
+                showSystemMessage('文件上传失败：无效的文件对象', 'error');
+                return;
+            }
+
+            updateSessionStatus(SessionStatus.INITIALIZING);
+            
+            console.log('开始处理作业上传，文件列表:', files);
+            
+            // 使用Array.from之前进行类型检查
+            const filesList = files.length !== undefined ? Array.from(files) : [];
+            console.log('转换后的文件列表:', filesList);
+            
+            if (filesList.length === 0) {
+                showSystemMessage('请选择作业文件', 'error');
+                return;
+            }
+            
+            if (filesList.length > 5) {
+                showSystemMessage('一次最多只能上传5张图片', 'error');
+                return;
+            }
+
+            // 检查每个文件对象的有效性
+            for (let file of filesList) {
+                if (!file || typeof file !== 'object') {
+                    console.error('无效的文件对象:', file);
+                    showSystemMessage('文件上传失败：文件格式错误', 'error');
+                    return;
+                }
+
+                console.log('检查文件:', file.name, '类型:', file.type, '大小:', file.size);
+                
+                if (!file.type || !file.type.startsWith('image/')) {
+                    showSystemMessage('只能上传图片文件', 'error');
+                    return;
+                }
+                
+                if (!file.size || file.size > 10 * 1024 * 1024) { // 10MB
+                    showSystemMessage('图片大小不能超过10MB', 'error');
+                    return;
+                }
+            }
+            
+            console.log('文件验证通过，显示科目选择对话框');
+            
+            // 显示科目选择对话框
+            const subjectDialog = document.createElement('div');
+            subjectDialog.className = 'subject-dialog';
+            subjectDialog.innerHTML = `
+                <div class="subject-dialog-content">
+                    <h3>请选择作业科目</h3>
+                    <div class="subject-options">
+                        <button data-subject="chinese">语文</button>
+                        <button data-subject="math">数学</button>
+                        <button data-subject="english">英语</button>
+                    </div>
+                </div>
+            `;
+            
+            document.body.appendChild(subjectDialog);
+            
+            // 处理科目选择
+            subjectDialog.querySelectorAll('button').forEach(button => {
+                button.addEventListener('click', async () => {
+                    try {
+                        const subject = button.dataset.subject;
+                        console.log('选择科目:', subject, '文件数量:', filesList.length);
+                        document.body.removeChild(subjectDialog);
+                        await uploadHomework(filesList, subject);
+        } catch (error) {
+                        console.error('处理科目选择时出错:', error);
+                        showSystemMessage(`处理失败: ${error.message}`, 'error');
+                    }
+                });
+            });
+        } catch (error) {
+            console.error('处理作业上传时出错:', error);
+            updateSessionStatus(SessionStatus.ERROR, {
+                message: error.message,
+                errorType: 'UPLOAD_ERROR',
+                errorDescription: '上传作业时发生错误'
+            });
+            showSystemMessage('文件上传失败：' + error.message, 'error');
+        }
+    }
+
+    // 上传作业并获取批改结果
+    async function uploadHomework(files, subject) {
+        try {
+            console.log('开始上传作业 - 文件数量:', files.length, '科目:', subject);
+            
+            if (!files || !Array.isArray(files) || files.length === 0) {
+                throw new Error('请选择要批改的作业文件');
+            }
+            
+            if (!subject || subject.trim() === '') {
+                throw new Error('请选择作业科目');
+            }
+            
+            showSystemMessage('正在上传作业...', 'info');
+            
+            const formData = new FormData();
+            files.forEach(file => {
+                formData.append('files', file);
+                console.log('添加文件到表单:', file.name, file.size, 'bytes');
+            });
+            formData.append('subject', subject);
+            formData.append('sessionId', sessionId);
+            
+            console.log('准备发送请求 - 科目:', subject, '会话ID:', sessionId);
+            
+            // 创建消息容器
+            const messageContainer = createMessageElement('assistant', '');
+            elements.chatMessages.appendChild(messageContainer);
+            messageContainer.querySelector('.message-content').innerHTML = '<div class="typing-indicator">正在批改作业...</div>';
+            
+            // 发送请求，添加完整的请求头
+            const response = await fetch('/homework/check', {
+                method: 'POST',
+                headers: {
+                    'Accept': 'text/event-stream, application/json, */*',
+                    'X-Requested-With': 'XMLHttpRequest'
+                },
+                body: formData
+            });
+            
+            if (!response.ok) {
+                const errorText = await response.text();
+                console.error('服务器响应错误:', response.status, errorText);
+                
+                // 根据不同的错误状态码提供更友好的错误信息
+                if (response.status === 406) {
+                    throw new Error('服务器无法处理上传的文件格式，请确保上传的是图片文件');
+                } else if (response.status === 413) {
+                    throw new Error('文件太大，请压缩后再上传');
+                } else if (response.status === 415) {
+                    throw new Error('不支持的文件类型，请上传图片文件');
+                } else {
+                    throw new Error(`上传失败: ${errorText}`);
+                }
+            }
+            
+            // 检查响应类型
+            const contentType = response.headers.get('content-type');
+            if (!contentType || (!contentType.includes('text/event-stream') && !contentType.includes('application/json'))) {
+                throw new Error('服务器返回了不支持的响应格式');
+            }
+            
+            console.log('开始处理服务器响应');
+            
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let buffer = '';
+            let lastContent = ''; // 用于保存最后的内容
+            
+            while (true) {
+                const {value, done} = await reader.read();
+                if (done) {
+                    console.log('响应流读取完成');
+                    break;
+                }
+                
+                buffer += decoder.decode(value, {stream: true});
+                const lines = buffer.split('\n');
+                buffer = lines.pop() || '';
+                
+                for (const line of lines) {
+                    if (line.trim() === '') continue;
+                    
+                    if (line.startsWith('data:')) {
+                        try {
+                            const eventData = JSON.parse(line.slice(5));
+                            
+                            if (eventData.error) {
+                                updateSessionStatus(SessionStatus.ERROR, eventData);
+                                break;
+                            }
+                            
+                            if (eventData.type === 'done') {
+                                console.log('收到完成消息');
+                                // 不做任何清空操作，保持最后的内容
+                                continue;
+                            }
+                            
+                            // 更新内容
+                            if (eventData.content) {
+                                lastContent = eventData.content; // 保存最新的内容
+                                messageContainer.querySelector('.message-content').innerHTML = marked.parse(eventData.content);
+                                
+                                // 渲染数学公式
+                                if (typeof renderMathInElement === 'function') {
+                                    renderMathInElement(messageContainer.querySelector('.message-content'), {
+                                        delimiters: [
+                                            {left: '$$', right: '$$', display: true},
+                                            {left: '$', right: '$', display: false},
+                                            {left: '\\(', right: '\\)', display: false},
+                                            {left: '\\[', right: '\\]', display: true}
+                                        ],
+                                        throwOnError: false
+                                    });
+                                }
+                            }
+                        } catch (e) {
+                            console.error('解析消息时出错:', e);
+                        }
+                    }
+                }
+            }
+            
+            // 确保显示最后的内容
+            if (lastContent) {
+                messageContainer.querySelector('.message-content').innerHTML = marked.parse(lastContent);
+                // 最后一次渲染数学公式
+                if (typeof renderMathInElement === 'function') {
+                    renderMathInElement(messageContainer.querySelector('.message-content'), {
+                        delimiters: [
+                            {left: '$$', right: '$$', display: true},
+                            {left: '$', right: '$', display: false},
+                            {left: '\\(', right: '\\)', display: false},
+                            {left: '\\[', right: '\\]', display: true}
+                        ],
+                        throwOnError: false
+                    });
+                }
+            }
+            
+            // 滚动到底部
+            scrollToBottom();
+            
+            updateSessionStatus(SessionStatus.COMPLETED);
+        } catch (error) {
+            console.error('作业批改失败:', error);
+            updateSessionStatus(SessionStatus.ERROR, {
+                message: error.message,
+                errorType: 'UPLOAD_ERROR',
+                errorDescription: '上传作业时发生错误'
+            });
+            showSystemMessage(error.message, 'error');
+        }
+    }
+
+    // 添加移动端调试支持
+    function initMobileDebug() {
+        // 只保留基本的错误捕获功能
+        window.onerror = function(msg, url, lineNo, columnNo, error) {
+            console.error('错误: ' + msg + '\n' +
+                         '文件: ' + url + '\n' +
+                         '行号: ' + lineNo + '\n' +
+                         '列号: ' + columnNo + '\n' +
+                         '错误对象: ' + JSON.stringify(error));
+            return false;
+        };
+        
+        // 添加Promise错误捕获
+        window.onunhandledrejection = function(event) {
+            console.error('Promise错误: ', event.reason);
+        };
+        
+        // 添加基本的移动端信息日志
+        console.log('移动端设备信息:', {
+            userAgent: navigator.userAgent,
+            platform: navigator.platform,
+            language: navigator.language,
+            screenSize: `${window.screen.width}x${window.screen.height}`,
+            devicePixelRatio: window.devicePixelRatio,
+            orientation: window.orientation
+        });
+    }
+
+    // 在初始化函数中调用
+    async function initializeChat() {
+        try {
+            // 检测是否为移动设备
+            const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+            if (isMobile) {
+                console.log('检测到移动设备');
+                initMobileDebug();
+            }
+            
+            // 加载外部资源
+            await loadExternalResources();
+
+        // 自动聚焦输入框
+        focusInput();
+
+        // 设置输入框事件监听
+        elements.messageInput.addEventListener('input', handleInput);
+        
+        // 添加键盘事件监听，处理回车发送消息
+        elements.messageInput.addEventListener('keydown', handleKeyPress);
+
+        // 设置表单提交事件
+        elements.chatForm.addEventListener('submit', handleSubmit);
+
+        // 设置消息观察器
+        setupMessageObserver();
+        
+        // 监听历史状态变化
+        window.addEventListener('popstate', handleHistoryChange);
+
+        // 初始化 Socket.IO
+        initializeSocketIO();
+
+        // 调试元素初始化状态
+        console.log('初始化前检查上传菜单相关元素:');
+        console.log('- 加号按钮:', elements.addButton);
+        console.log('- 上传菜单:', elements.uploadMenu);
+        console.log('- 上传文件选项:', elements.uploadFileOption);
+        console.log('- 文件上传输入:', elements.fileUpload);
+        
+        // 重新获取元素（确保在DOM完全加载后）
+        elements.addButton = document.getElementById('add-button');
+        elements.uploadMenu = document.getElementById('upload-menu');
+        elements.uploadFileOption = document.getElementById('upload-file-option');
+        elements.fileUpload = document.getElementById('file-upload');
+        
+        console.log('重新获取后的元素:');
+        console.log('- 加号按钮:', elements.addButton);
+        console.log('- 上传菜单:', elements.uploadMenu);
+        console.log('- 上传文件选项:', elements.uploadFileOption);
+        console.log('- 文件上传输入:', elements.fileUpload);
+
+        // 设置上传菜单事件
+        setupUploadMenu();
+        
+        // 设置作业上传事件监听
+        const uploadHomeworkOption = document.querySelector('.upload-option[data-type="homework"]');
+        if (uploadHomeworkOption) {
+            console.log('找到作业上传选项元素');
+            const homeworkInput = document.createElement('input');
+            homeworkInput.type = 'file';
+            homeworkInput.multiple = true;
+            homeworkInput.accept = 'image/*';
+            homeworkInput.style.display = 'none';
+            document.body.appendChild(homeworkInput);
+            
+            uploadHomeworkOption.addEventListener('click', () => {
+                console.log('作业上传选项被点击');
+                hideUploadMenu();
+                homeworkInput.click();
+            });
+            
+            homeworkInput.addEventListener('change', (e) => {
+                console.log('选择了作业文件:', e.target.files);
+                handleHomeworkUpload(e.target.files);
+                homeworkInput.value = ''; // 清空选择，允许重复选择相同文件
+            });
+        } else {
+            console.warn('未找到作业上传选项元素');
+        }
+
+			// 所有初始化完成后启用输入框，但保持发送按钮禁用状态（直到有输入）
+			setInputState(true);
+            elements.sendButton.disabled = true; // 初始状态下输入框是空的，所以发送按钮应该是禁用的
+			showSystemMessage('准备就绪', 'success');
+		} catch (error) {
+			console.error('初始化失败:', error);
+			showSystemMessage('初始化失败，请刷新页面重试', 'error');
+		}
+    }
+});
