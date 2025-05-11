@@ -2284,42 +2284,67 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // 开始新对话
-    function startNewChat() {
-        // 添加确认提示，防止意外清空对话
-        if (elements.chatMessages.children.length > 0) {
-            const confirmNewChat = window.confirm('开始新对话将清空当前对话内容，确定继续吗？');
-            if (!confirmNewChat) {
-                return; // 用户取消，不清空对话
-            }
-        }
-        
-        // 生成新的会话ID
-        const newSessionId = generateSessionId();
-        
-        // 移除所有活动状态
-        document.querySelectorAll('.chat-link').forEach(link => {
-            link.classList.remove('active');
-        });
-        
-        // 先在侧边栏添加新对话
-        addChatToHistory('新对话', newSessionId, true);  // 确保设置为活动状态
-        
-        // 更新当前会话ID
-        sessionId = newSessionId;
-        
-        // 清空消息显示区域
-        elements.chatMessages.innerHTML = '';
-        
-        // 更新URL而不刷新页面
-        const newUrl = `/chat/s/${newSessionId}`;
-        window.history.pushState({ sessionId: newSessionId }, '', newUrl);
-        
-        // 显示欢迎消息
-        showSystemMessage('已创建新对话', 'success');
-        setTimeout(() => {
-            focusInput(); // 聚焦到输入框
-        }, 100);
-    }
+	function startNewChat() {
+	    // 如果当前对话有消息，弹出确认提示
+	    if (elements.chatMessages.children.length > 0) {
+	        const confirmNewChat = window.confirm('开始新对话将清空当前对话内容，确定继续吗？');
+	        if (!confirmNewChat) {
+	            return; // 用户取消操作
+	        }
+	    }
+
+	    // 生成新的会话ID
+	    const newSessionId = generateSessionId();
+
+	    // 移除所有侧边栏链接的活动状态
+	    document.querySelectorAll('.chat-link').forEach(link => {
+	        link.classList.remove('active');
+	    });
+
+	    // 在侧边栏添加新的对话，并设置为活动状态
+	    addChatToHistory('新对话', newSessionId, true);
+
+	    // 更新当前会话ID
+	    sessionId = newSessionId;
+
+	    // 清空消息显示区域
+	    elements.chatMessages.innerHTML = '';
+
+	    // 更新URL以反映新的会话ID
+	    const newUrl = `/chat/s/${newSessionId}`;
+	    window.history.pushState({ sessionId: newSessionId }, '', newUrl);
+
+	    // 如果启用了学习分析功能，则重置相关数据
+	    if (learningAnalytics) {
+	        // 清除当前报告模态框
+	        if (learningAnalytics.currentReportModal && document.body.contains(learningAnalytics.currentReportModal)) {
+	            document.body.removeChild(learningAnalytics.currentReportModal);
+	        }
+	        learningAnalytics.currentReportModal = null;
+
+	        // 清除报告缓存
+	        learningAnalytics.reportCache.clear();
+
+	        // 初始化新会话的数据结构
+	        if (!learningAnalytics.data.sessionAnalytics[newSessionId]) {
+	            learningAnalytics.data.sessionAnalytics[newSessionId] = {
+	                questions: [],          // 记录提问的问题
+	                topics: new Set(),     // 记录讨论的主题
+	                startTime: Date.now(), // 记录会话开始时间
+	                lastActive: Date.now() // 记录最后活跃时间
+	            };
+	            learningAnalytics.saveData(); // 保存数据到持久化存储
+	        }
+	    }
+
+	    // 显示欢迎消息
+	    showSystemMessage('已创建新对话', 'success');
+
+	    // 延迟100毫秒后聚焦到输入框
+	    setTimeout(() => {
+	        focusInput();
+	    }, 100);
+	}
 
     // 加载历史对话
     function loadHistoryChat(chatId) {
