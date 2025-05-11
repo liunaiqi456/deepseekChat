@@ -155,9 +155,6 @@ public class HomeworkServiceImpl implements HomeworkService, Serializable {
             // 流式调用
             Flowable<MultiModalConversationResult> result = conversation.streamCall(param);
             
-            // 用于累积消息内容
-            StringBuilder accumulatedContent = new StringBuilder();
-            
             // 更新会话状态
             sessionStatusMap.put(sessionId, SessionStatus.PROCESSING);
             
@@ -187,19 +184,22 @@ public class HomeworkServiceImpl implements HomeworkService, Serializable {
                                 return;
                             }
                             
-                            // 累加新内容
-                            accumulatedContent.append(messageText);
+                            // 直接使用增量内容，只包含content字段
+                            responseJson.put("content", messageText);
+                            String jsonString = mapper.writeValueAsString(responseJson);
                             
-                            // 发送完整的累积内容，确保内容不为null
-                            String currentContent = accumulatedContent.toString();
-                            responseJson.put("content", currentContent != null ? currentContent : "");
-                            responseJson.put("type", "message"); // 添加消息类型
+                            // 使用SseEmitter.SseEventBuilder构建SSE事件
+                            SseEmitter.SseEventBuilder eventBuilder = SseEmitter.event()
+                                .data(jsonString)
+                                .id(String.valueOf(System.currentTimeMillis()))
+                                .name("message");
                             
-                            // 发送SSE事件
-                            emitter.send(SseEmitter.event()
-                                    .data(mapper.writeValueAsString(responseJson))
-                                    .id(String.valueOf(System.currentTimeMillis()))
-                                    .name("message"));
+                            // 打印发送的消息内容
+                            System.out.println("=== 发送的SSE消息开始 ===");
+                            System.out.println("使用SseEventBuilder发送: " + jsonString);
+                            System.out.println("=== 发送的SSE消息结束 ===");
+                            
+                            emitter.send(eventBuilder);
                             
                         } catch (Exception e) {
                             sessionStatusMap.put(sessionId, SessionStatus.ERROR);
@@ -217,21 +217,12 @@ public class HomeworkServiceImpl implements HomeworkService, Serializable {
                     () -> {
                         try {
                             sessionStatusMap.put(sessionId, SessionStatus.COMPLETED);
-                            // 创建完成消息的JSON格式
-                            ObjectMapper mapper = new ObjectMapper();
-                            ObjectNode doneJson = mapper.createObjectNode();
-                            doneJson.put("type", "done");
-                            doneJson.put("content", ""); // 确保content字段存在且不为null
-                            
-                            emitter.send(SseEmitter.event()
-                                    .data(mapper.writeValueAsString(doneJson))
-                                    .id(String.valueOf(System.currentTimeMillis()))
-                                    .name("done"));
+                            // 直接完成，不发送[DONE]消息
                             emitter.complete();
                         } catch (Exception e) {
                             sessionStatusMap.put(sessionId, SessionStatus.ERROR);
                             sessionErrorMap.put(sessionId, e.getMessage());
-                            logger.error("发送完成消息时出错: {}", e.getMessage(), e);
+                            logger.error("完成时出错: {}", e.getMessage(), e);
                             handleError(emitter, e);
                         }
                     }
@@ -309,10 +300,20 @@ public class HomeworkServiceImpl implements HomeworkService, Serializable {
                 errorJson.put("stackTrace", sw.toString());
             }
             
-            // 发送错误事件
-            emitter.send(SseEmitter.event()
-                    .data(mapper.writeValueAsString(errorJson))
-                    .name("error"));
+            // 错误消息
+            String errorJsonString = mapper.writeValueAsString(errorJson);
+            
+            // 使用SseEmitter.SseEventBuilder构建错误消息
+            SseEmitter.SseEventBuilder errorEventBuilder = SseEmitter.event()
+                .data(errorJsonString)
+                .id(String.valueOf(System.currentTimeMillis()))
+                .name("error");
+            
+            System.out.println("=== 发送的错误消息开始 ===");
+            System.out.println("使用SseEventBuilder发送: " + errorJsonString);
+            System.out.println("=== 发送的错误消息结束 ===");
+            
+            emitter.send(errorEventBuilder);
                     
             // 记录详细日志
             logger.error("错误类型: {}, 描述: {}, 详细信息: {}", 

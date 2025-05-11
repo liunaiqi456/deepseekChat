@@ -22,6 +22,7 @@
     overflow-y: auto;
     position: relative;
     box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    padding-top: 40px; /* 为关闭按钮留出空间 */
 }
 
 .close-button {
@@ -31,10 +32,28 @@
     font-size: 24px;
     cursor: pointer;
     color: #666;
+    background: none;
+    border: none;
+    padding: 5px;
+    z-index: 10001; /* 确保关闭按钮始终在最上层 */
+    pointer-events: auto; /* 确保按钮可以点击 */
 }
 
 .close-button:hover {
     color: #000;
+}
+
+/* 确保模态框内容不会遮挡关闭按钮 */
+.report-modal-content {
+    position: relative;
+}
+
+/* 错误消息样式 */
+.error-message {
+    color: #dc3545;
+    text-align: center;
+    padding: 20px;
+    font-size: 16px;
 }
 
 /* 学习报告样式 */
@@ -141,4 +160,27 @@
         transform: translateY(0);
         opacity: 1;
     }
+}
+
+/* 确保加载状态不会阻止交互 */
+#improvement-suggestions {
+    position: relative;
+    min-height: 50px;
+    pointer-events: none;
+}
+
+#improvement-suggestions p {
+    pointer-events: auto;
+}
+
+.loading-indicator {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 200px;
+    color: #666;
+    font-size: 16px;
+    text-align: center;
+    position: relative;
+    z-index: 1;
 } 

@@ -19,18 +19,42 @@ class LearningAnalytics {
     constructor() {
         this.STORAGE_KEY = 'learning_analytics';
         this.data = this.loadData();
+        this.reportCache = new Map(); // 添加报告缓存
+        this.currentReportModal = null; // 当前显示的报告模态框
+        
+        // 确保数据结构完整
+        if (!this.data.questions) this.data.questions = {};
+        if (!this.data.topics) this.data.topics = {};
+        if (!this.data.sessionAnalytics) this.data.sessionAnalytics = {};
+        if (!this.data.personalRecommendations) this.data.personalRecommendations = {};
+        
+        // 保存初始化的数据
+        this.saveData();
+        
+        console.log('学习分析系统初始化完成:', this.data);
     }
 
     // 加载数据
     loadData() {
         try {
+            console.log('开始加载学习数据');
             const stored = localStorage.getItem(this.STORAGE_KEY);
-            return stored ? JSON.parse(stored) : {
+            let data = stored ? JSON.parse(stored) : {
                 questions: {},           // 问题频率统计
                 topics: {},             // 主题分布
                 sessionAnalytics: {},    // 会话分析
                 personalRecommendations: {} // 个性化建议
             };
+            
+            // 确保所有会话的 topics 是 Set 对象
+            Object.values(data.sessionAnalytics || {}).forEach(session => {
+                if (session && session.topics && !(session.topics instanceof Set)) {
+                    session.topics = new Set(Array.from(session.topics || []));
+                }
+            });
+            
+            console.log('学习数据加载完成:', data);
+            return data;
         } catch (error) {
             console.error('加载学习数据失败:', error);
             return {
@@ -45,86 +69,69 @@ class LearningAnalytics {
     // 保存数据
     saveData() {
         try {
+            // 数据验证
+            if (!this.data) {
+                console.error('保存数据失败：数据对象为空');
+                return false;
+            }
+
+            // 确保所有必要的数据结构存在
+            if (!this.data.questions) this.data.questions = {};
+            if (!this.data.topics) this.data.topics = {};
+            if (!this.data.sessionAnalytics) this.data.sessionAnalytics = {};
+            if (!this.data.personalRecommendations) this.data.personalRecommendations = {};
+
+            // 转换Set为数组以便存储
+            Object.values(this.data.sessionAnalytics).forEach(session => {
+                if (session && session.topics instanceof Set) {
+                    session.topics = Array.from(session.topics);
+                }
+            });
+
+            // 立即保存到localStorage
             localStorage.setItem(this.STORAGE_KEY, JSON.stringify(this.data));
+            console.log('学习数据已保存:', this.data);
+            return true;
         } catch (error) {
-            console.error('保存学习数据失败:', error);
+            console.error('保存学习数据时出错:', error);
+            return false;
         }
     }
 
     // 记录新问题
     recordQuestion(question, sessionId) {
-        try {
-            console.log('记录问题:', question, '会话ID:', sessionId);
-            
-            // 1. 更新问题频率
-            const questionKey = this.normalizeQuestion(question);
-            this.data.questions[questionKey] = (this.data.questions[questionKey] || 0) + 1;
-
-            // 2. 分析问题主题
-            const topics = this.analyzeTopics(question);
-            console.log('分析出的主题:', topics);
-            
-            topics.forEach(topic => {
-                this.data.topics[topic] = (this.data.topics[topic] || 0) + 1;
-            });
-
-            // 3. 更新会话分析
-            if (!this.data.sessionAnalytics[sessionId]) {
-                console.log('创建新的会话数据');
-                this.data.sessionAnalytics[sessionId] = {
-                    questions: [],
-                    topics: new Set(),  // 确保使用Set
-                    startTime: Date.now(),
-                    lastActive: Date.now()
-                };
-            } else if (!(this.data.sessionAnalytics[sessionId].topics instanceof Set)) {
-                console.log('将已有topics转换为Set');
-                // 如果topics不是Set，将其转换为Set
-                const existingTopics = Array.from(this.data.sessionAnalytics[sessionId].topics || []);
-                this.data.sessionAnalytics[sessionId].topics = new Set(existingTopics);
-            }
-            
-            // 添加问题记录
-            this.data.sessionAnalytics[sessionId].questions.push({
-                question: question,
-                timestamp: Date.now(),
-                topics: topics
-            });
-            
-            // 更新主题集合
-            const sessionTopics = this.data.sessionAnalytics[sessionId].topics;
-            topics.forEach(topic => {
-                console.log('添加主题到Set:', topic);
-                sessionTopics.add(topic);
-            });
-            
-            // 更新最后活动时间
-            this.data.sessionAnalytics[sessionId].lastActive = Date.now();
-
-            // 4. 生成个性化建议
-            this.generateRecommendations(sessionId);
-
-            // 5. 保存更新
-            this.saveData();
-            console.log('问题记录完成，当前会话数据:', {
-                questions: this.data.sessionAnalytics[sessionId].questions.length,
-                topics: Array.from(this.data.sessionAnalytics[sessionId].topics),
-                startTime: new Date(this.data.sessionAnalytics[sessionId].startTime).toLocaleString(),
-                lastActive: new Date(this.data.sessionAnalytics[sessionId].lastActive).toLocaleString()
-            });
-
-        } catch (error) {
-            console.error('记录问题时出错:', error);
-            // 尝试恢复或初始化数据结构
-            if (!this.data.sessionAnalytics[sessionId]) {
-                this.data.sessionAnalytics[sessionId] = {
-                    questions: [],
-                    topics: new Set(),
-                    startTime: Date.now(),
-                    lastActive: Date.now()
-                };
+        console.log('记录问题:', question, '会话ID:', sessionId);
+        
+        // 从localStorage获取聊天历史以获取标题
+        const chatHistory = localStorage.getItem('deepseek_chat_history');
+        let currentChatTitle = '新对话';
+        if (chatHistory) {
+            const historyData = JSON.parse(chatHistory);
+            const currentChat = historyData.find(chat => chat.id === sessionId);
+            if (currentChat) {
+                currentChatTitle = currentChat.title;
             }
         }
+
+        if (!this.data.sessionAnalytics[sessionId]) {
+            this.data.sessionAnalytics[sessionId] = {
+                questions: [],
+                lastUpdate: Date.now()
+            };
+        }
+
+        const normalizedQuestion = this.normalizeQuestion(question);
+        const topics = this.analyzeTopics(question);
+
+        this.data.sessionAnalytics[sessionId].questions.push({
+            question: normalizedQuestion,
+            timestamp: new Date().toISOString(),
+            topics: topics,
+            title: currentChatTitle
+        });
+
+        this.data.sessionAnalytics[sessionId].lastUpdate = Date.now();
+        this.saveData();
     }
 
     // 标准化问题文本
@@ -336,6 +343,9 @@ class LearningAnalytics {
     getLearningReport(sessionId) {
         console.log('获取学习报告，会话ID:', sessionId);
         try {
+            // 重新加载数据以确保最新状态
+            this.data = this.loadData();
+            
             const sessionData = this.data.sessionAnalytics[sessionId];
             console.log('会话数据:', sessionData);
             
@@ -375,9 +385,24 @@ class LearningAnalytics {
                 timeManagement: []
             };
 
-            console.log('返回报告数据');
+            // 计算最新的会话时长
+            const firstQuestionTime = sessionData.questions.length > 0 ? 
+                sessionData.questions[0].timestamp : 
+                sessionData.startTime;
+            
+            const lastQuestionTime = sessionData.questions.length > 0 ? 
+                sessionData.questions[sessionData.questions.length - 1].timestamp : 
+                sessionData.lastActive;
+
+            // 使用最新的时间计算会话时长
+            const sessionDuration = lastQuestionTime - firstQuestionTime;
+
+            // 保存更新后的数据
+            this.saveData();
+
+            console.log('返回报告数据，会话时长:', sessionDuration);
             return {
-                sessionDuration: Date.now() - sessionData.startTime,
+                sessionDuration: sessionDuration,
                 questionCount: sessionData.questions.length,
                 topics: Array.from(sessionData.topics),
                 recommendations: recommendations,
@@ -401,236 +426,530 @@ class LearningAnalytics {
     }
 
     // 显示学习报告
-    displayLearningReport(sessionId) {
+    async displayLearningReport(sessionId) {
         console.log('开始生成学习报告，会话ID:', sessionId);
         try {
-            const report = this.getLearningReport(sessionId);
-            console.log('获取到的报告数据:', report);
+            // 检查数据同步状态
+            if (!this.checkDataSync(sessionId)) {
+                this.data = this.loadData();
+            }
+            
+            // 检查是否有当前会话的数据
+            const sessionData = this.data.sessionAnalytics[sessionId];
+            if (!sessionData) {
+                console.log('未找到当前会话的数据');
+                // 创建一个空的报告模态框
+                const modalDiv = this.createReportModal(sessionId);
+                modalDiv.querySelector('#questions-history').innerHTML = '<p style="color: #666;">当前会话暂无学习数据</p>';
+                modalDiv.querySelector('#improvement-suggestions').innerHTML = '<p style="color: #666;">开始提问以获取学习建议</p>';
+                
+                // 设置关闭按钮行为
+                const closeButton = modalDiv.querySelector('.close-button');
+                closeButton.onclick = (e) => {
+                    e.stopPropagation();
+                    modalDiv.style.display = 'none';
+                };
+                
+                // 点击模态框外部关闭
+                modalDiv.onclick = (e) => {
+                    if (e.target === modalDiv) {
+                        modalDiv.style.display = 'none';
+                    }
+                };
+                
+                document.body.appendChild(modalDiv);
+                return;
+            }
+            
+            // 检查是否有缓存的报告
+            if (this.currentReportModal) {
+                // 如果模态框已存在但隐藏，则显示它
+                if (this.currentReportModal.style.display === 'none') {
+                    this.currentReportModal.style.display = 'flex';
+                    return;
+                }
+            }
 
-            // 创建模态框容器
-            const modalDiv = document.createElement('div');
-            modalDiv.className = 'report-modal';
-            modalDiv.style.cssText = `
-                position: fixed;
-                top: 0;
-                left: 0;
-                width: 100%;
-                height: 100%;
-                background-color: rgba(0, 0, 0, 0.5);
-                display: flex;
-                justify-content: center;
-                align-items: center;
-                z-index: 10000;
-            `;
+            // 创建或获取模态框
+            const modalDiv = this.createReportModal(sessionId);
+            this.currentReportModal = modalDiv;
+            
+            // 设置关闭按钮行为
+            const closeButton = modalDiv.querySelector('.close-button');
+            closeButton.onclick = (e) => {
+                e.stopPropagation();
+                console.log('关闭按钮被点击');
+                modalDiv.style.display = 'none';
+            };
+            
+            // 点击模态框外部关闭
+            modalDiv.onclick = (e) => {
+                if (e.target === modalDiv) {
+                    console.log('点击模态框外部，隐藏模态框');
+                    modalDiv.style.display = 'none';
+                }
+            };
 
-            // 生成报告内容
-            const content = document.createElement('div');
-            content.className = 'report-modal-content';
-            content.style.cssText = `
-                background-color: white;
-                padding: 20px;
-                border-radius: 8px;
-                max-width: 800px;
-                width: 90%;
-                max-height: 90vh;
-                overflow-y: auto;
-                position: relative;
-                box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-            `;
+            // 如果已有模态框，先移除
+            if (document.body.contains(this.currentReportModal)) {
+                document.body.removeChild(this.currentReportModal);
+            }
 
-            // 添加关闭按钮
-            const closeButton = document.createElement('button');
-            closeButton.innerHTML = '&times;';
-            closeButton.className = 'close-button';
-            closeButton.style.cssText = `
-                position: absolute;
-                right: 10px;
-                top: 10px;
-                font-size: 24px;
-                cursor: pointer;
-                background: none;
-                border: none;
-                color: #666;
-            `;
+            // 添加到body
+            document.body.appendChild(modalDiv);
 
-            // 获取提问历史
-            const questions = this.data.sessionAnalytics[sessionId]?.questions || [];
+            // 获取会话数据
+            const questions = sessionData.questions || [];
             const questionsList = questions.map(q => ({
                 question: q.question,
                 timestamp: new Date(q.timestamp).toLocaleString(),
                 topics: q.topics || []
             }));
 
-            // 生成报告HTML
-            const reportContent = document.createElement('div');
-            reportContent.className = 'learning-report';
-            reportContent.innerHTML = `
-                <h3 style="margin-bottom: 20px; color: #333;">学习报告</h3>
+            // 更新提问历史显示
+            const questionsHistory = modalDiv.querySelector('#questions-history');
+            if (questionsHistory) {
+                if (questionsList.length === 0) {
+                    questionsHistory.innerHTML = '<p style="color: #666;">当前会话暂无提问记录</p>';
+                } else {
+                    questionsHistory.innerHTML = questionsList.map(q => `
+                        <div style="margin-bottom: 15px; padding: 10px; background: white; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                            <p style="margin: 0; color: #666; font-size: 0.9em;">${q.timestamp}</p>
+                            <p style="margin: 5px 0; color: #333;">${q.question}</p>
+                            <p style="margin: 0; color: #666; font-size: 0.9em;">主题: ${q.topics.join(', ') || '未分类'}</p>
+                        </div>
+                    `).join('');
+                }
+            }
+
+            // 检查是否有缓存的建议
+            const suggestionsDiv = modalDiv.querySelector('#improvement-suggestions');
+            if (suggestionsDiv) {
+                if (!this.reportCache.has(sessionId)) {
+                    // 只在没有缓存时请求新数据
+                    suggestionsDiv.innerHTML = '<p style="color: #666;">正在分析学习数据...</p>';
+                    const suggestions = await this.fetchImprovementSuggestions(sessionId, questionsList);
+                    this.reportCache.set(sessionId, suggestions);
+                }
                 
-                <div class="report-section" style="margin-bottom: 20px; padding: 15px; background: #f8f9fa; border-radius: 8px;">
-                    <h4 style="color: #1a73e8; margin-bottom: 15px;">学习概况</h4>
-                    <p>学习时长: ${this.formatDuration(report.sessionDuration)}</p>
-                    <p>提问数量: ${report.questionCount}题</p>
-                </div>
-
-                <div class="report-section" style="margin-bottom: 20px; padding: 15px; background: #f8f9fa; border-radius: 8px;">
-                    <h4 style="color: #1a73e8; margin-bottom: 15px;">提问历史</h4>
-                    <div style="max-height: 300px; overflow-y: auto;">
-                        ${questionsList.map(q => `
-                            <div style="margin-bottom: 15px; padding: 10px; background: white; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
-                                <p style="margin: 0; color: #666; font-size: 0.9em;">${q.timestamp}</p>
-                                <p style="margin: 5px 0; color: #333;">${q.question}</p>
-                                <p style="margin: 0; color: #666; font-size: 0.9em;">主题: ${q.topics.join(', ') || '未分类'}</p>
-                            </div>
-                        `).join('')}
-                    </div>
-                </div>
-
-                <div class="report-section" style="margin-bottom: 20px; padding: 15px; background: #f8f9fa; border-radius: 8px;">
-                    <h4 style="color: #1a73e8; margin-bottom: 15px;">需要加强的主题</h4>
-                    <div id="improvement-suggestions" style="min-height: 50px;">
-                        <p style="color: #666;">正在分析学习数据...</p>
-                    </div>
-                </div>
-            `;
-
-            // 组装模态框
-            content.appendChild(closeButton);
-            content.appendChild(reportContent);
-            modalDiv.appendChild(content);
-
-            // 添加到body
-            document.body.appendChild(modalDiv);
-            console.log('模态框已添加到DOM');
-
-            // 获取主题建议
-            this.fetchImprovementSuggestions(sessionId, questionsList).then(suggestions => {
-                const suggestionsDiv = document.getElementById('improvement-suggestions');
-                if (suggestionsDiv) {
-                    suggestionsDiv.innerHTML = suggestions;
+                // 显示建议（从缓存或新请求）
+                suggestionsDiv.innerHTML = this.reportCache.get(sessionId);
+                
+                // 渲染数学公式
+                if (window.MathJax && window.MathJax.typesetPromise) {
+                    await window.MathJax.typesetPromise([suggestionsDiv]).catch((err) => {
+                        console.error('MathJax渲染错误:', err);
+                    });
                 }
-            });
+            }
 
-            // 添加关闭事件
-            closeButton.onclick = () => {
-                console.log('关闭按钮被点击');
-                document.body.removeChild(modalDiv);
+            // 设置刷新按钮点击事件
+            const refreshButton = modalDiv.querySelector('.refresh-button');
+            refreshButton.onclick = async () => {
+                console.log('刷新按钮被点击');
+                try {
+                    // 显示加载状态
+                    refreshButton.disabled = true;
+                    refreshButton.innerHTML = '🔄 刷新中...';
+                    
+                    // 重新加载数据
+                    this.data = this.loadData();
+                    
+                    // 获取最新的会话数据
+                    const sessionData = this.data.sessionAnalytics[sessionId];
+                    if (!sessionData) {
+                        throw new Error('无法获取会话数据');
+                    }
+                    
+                    // 更新提问历史
+                    const updatedQuestions = sessionData.questions || [];
+                    const updatedQuestionsList = updatedQuestions.map(q => ({
+                        question: q.question,
+                        timestamp: new Date(q.timestamp).toLocaleString(),
+                        topics: q.topics || []
+                    }));
+                    
+                    // 更新提问历史显示
+                    if (questionsHistory) {
+                        if (updatedQuestionsList.length === 0) {
+                            questionsHistory.innerHTML = '<p style="color: #666;">当前会话暂无提问记录</p>';
+                        } else {
+                            questionsHistory.innerHTML = updatedQuestionsList.map(q => `
+                                <div style="margin-bottom: 15px; padding: 10px; background: white; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                                    <p style="margin: 0; color: #666; font-size: 0.9em;">${q.timestamp}</p>
+                                    <p style="margin: 5px 0; color: #333;">${q.question}</p>
+                                    <p style="margin: 0; color: #666; font-size: 0.9em;">主题: ${q.topics.join(', ') || '未分类'}</p>
+                                </div>
+                            `).join('');
+                        }
+                    }
+                    
+                    // 获取新的建议并更新缓存
+                    if (suggestionsDiv) {
+                        suggestionsDiv.innerHTML = '<p style="color: #666;">正在重新分析学习数据...</p>';
+                        try {
+                            const newSuggestions = await this.fetchImprovementSuggestions(sessionId, updatedQuestionsList);
+                            // 先更新缓存
+                            this.reportCache.set(sessionId, newSuggestions);
+                            
+                            // 如果模态框还在显示，则更新显示
+                            if (modalDiv.style.display !== 'none') {
+                                suggestionsDiv.innerHTML = newSuggestions;
+                                
+                                // 重新渲染数学公式
+                                if (window.MathJax && window.MathJax.typesetPromise) {
+                                    await window.MathJax.typesetPromise([suggestionsDiv]).catch((err) => {
+                                        console.error('MathJax渲染错误:', err);
+                                    });
+                                }
+                            }
+                        } catch (fetchError) {
+                            console.error('获取建议时出错:', fetchError);
+                            // 如果获取失败，不清除原有缓存
+                            if (this.reportCache.has(sessionId)) {
+                                suggestionsDiv.innerHTML = this.reportCache.get(sessionId);
+                            } else {
+                                suggestionsDiv.innerHTML = '<div class="error-message">获取数据失败，请重试</div>';
+                            }
+                        }
+                    }
+                    
+                    // 恢复刷新按钮状态
+                    refreshButton.disabled = false;
+                    refreshButton.innerHTML = '🔄 刷新';
+                    
+                    console.log('报告刷新完成，缓存已更新');
+                } catch (error) {
+                    console.error('刷新报告时出错:', error);
+                    refreshButton.disabled = false;
+                    refreshButton.innerHTML = '🔄 刷新';
+                    showSystemMessage('刷新报告时出错: ' + error.message, 'error');
+                }
             };
 
-            // 点击模态框外部关闭
-            modalDiv.onclick = (e) => {
-                if (e.target === modalDiv) {
-                    console.log('点击模态框外部，关闭模态框');
-                    document.body.removeChild(modalDiv);
-                }
-            };
-
-            console.log('学习报告显示完成');
         } catch (error) {
             console.error('显示学习报告时出错:', error);
             showSystemMessage('显示学习报告时出错: ' + error.message, 'error');
         }
     }
 
+    // 在updateDOM函数之前添加新的refreshReportData方法
+    async refreshReportData(sessionId) {
+        console.log('==================== 开始刷新报告 ====================');
+        console.log('当前会话ID:', sessionId);
+        try {
+            // 从localStorage获取聊天历史
+            const chatHistory = localStorage.getItem('deepseek_chat_history');
+            console.log('获取到的聊天历史:', chatHistory);
+            
+            if (!chatHistory) {
+                console.log('未找到聊天历史记录');
+                return;
+            }
+
+            // 解析聊天历史
+            const historyData = JSON.parse(chatHistory);
+            console.log('解析后的历史数据:', historyData);
+            
+            // 查找当前会话的信息
+            const currentChat = historyData.find(chat => chat.id === sessionId);
+            console.log('当前会话信息:', currentChat);
+            
+            if (!currentChat) {
+                console.log('未找到当前会话信息');
+                return;
+            }
+            const currentChatTitle = currentChat.title;
+            console.log('当前会话标题:', currentChatTitle);
+
+            // 获取或初始化学习分析数据
+            let analyticsData = localStorage.getItem('learning_analytics');
+            console.log('获取到的学习分析数据:', analyticsData);
+            
+            if (!analyticsData) {
+                analyticsData = '{}';
+            }
+            let analytics = JSON.parse(analyticsData);
+            console.log('解析后的学习分析数据:', analytics);
+
+            // 确保会话数据存在
+            if (!analytics.sessionAnalytics) {
+                analytics.sessionAnalytics = {};
+            }
+            if (!analytics.sessionAnalytics[sessionId]) {
+                analytics.sessionAnalytics[sessionId] = {
+                    questions: [],
+                    lastUpdate: Date.now()
+                };
+            }
+
+            // 更新会话数据
+            const sessionData = analytics.sessionAnalytics[sessionId];
+            console.log('当前会话的学习数据:', sessionData);
+            
+            if (!sessionData.questions) {
+                sessionData.questions = [];
+            }
+
+            // 如果存在问题记录，更新标题
+            if (sessionData.questions.length > 0) {
+                console.log('更新前的问题列表:', sessionData.questions);
+                sessionData.questions.forEach(question => {
+                    question.title = currentChatTitle;
+                });
+                console.log('更新后的问题列表:', sessionData.questions);
+            }
+
+            // 保存更新后的数据
+            localStorage.setItem('learning_analytics', JSON.stringify(analytics));
+            this.data = analytics;
+            console.log('保存的最新数据:', this.data);
+
+            // 更新报告显示
+            if (this.currentReportModal) {
+                const questionsHistory = this.currentReportModal.querySelector('#questions-history');
+                const suggestionsDiv = this.currentReportModal.querySelector('#improvement-suggestions');
+                
+                if (questionsHistory) {
+                    const questions = sessionData.questions || [];
+                    console.log('准备显示的问题列表:', questions);
+                    
+                    const questionsList = questions.map(q => ({
+                        question: q.question,
+                        timestamp: new Date(q.timestamp).toLocaleString(),
+                        topics: q.topics || [],
+                        title: currentChatTitle // 使用当前会话的标题
+                    }));
+                    console.log('格式化后的问题列表:', questionsList);
+
+                    if (questionsList.length === 0) {
+                        questionsHistory.innerHTML = '<p style="color: #666;">当前会话暂无提问记录</p>';
+                    } else {
+                        questionsHistory.innerHTML = questionsList.map(q => `
+                            <div style="margin-bottom: 15px; padding: 10px; background: white; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                                <p style="margin: 0; color: #666; font-size: 0.9em;">${q.timestamp}</p>
+                                <p style="margin: 5px 0; color: #333;">${q.question}</p>
+                                <p style="margin: 0; color: #666; font-size: 0.9em;">标题: ${q.title}</p>
+                                <p style="margin: 0; color: #666; font-size: 0.9em;">主题: ${q.topics.join(', ') || '未分类'}</p>
+                            </div>
+                        `).join('');
+                    }
+                }
+
+                // 获取新的建议
+                if (suggestionsDiv && sessionData.questions.length > 0) {
+                    suggestionsDiv.innerHTML = '<p style="color: #666;">正在重新分析学习数据...</p>';
+                    
+                    // 构建请求内容，使用当前会话的最新问题
+                    const latestQuestion = sessionData.questions[sessionData.questions.length - 1];
+                    console.log('最新的问题记录:', latestQuestion);
+                    
+                    const requestData = {
+                        question: `基于以下学习历史，请分析我需要加强哪些主题，并给出具体的改进建议：\n问题：${currentChatTitle}\n时间：${new Date(latestQuestion.timestamp).toLocaleString()}\n`,
+                        sessionId: sessionId
+                    };
+                    console.log('准备发送的请求数据:', requestData);
+
+                    // 发送请求到服务器
+                    console.log('开始发送请求...');
+                    const response = await fetch('/chat/stream', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify(requestData)
+                    });
+
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+
+                    // 处理流式响应
+                    console.log('开始处理流式响应...');
+                    const reader = response.body.getReader();
+                    const decoder = new TextDecoder();
+                    let buffer = '';
+                    let fullContent = '';
+
+                    while (true) {
+                        const { done, value } = await reader.read();
+                        if (done) {
+                            console.log('流式响应接收完成');
+                            break;
+                        }
+
+                        buffer += decoder.decode(value, { stream: true });
+                        const lines = buffer.split('\n');
+                        buffer = lines.pop() || '';
+
+                        for (const line of lines) {
+                            if (!line.trim() || !line.startsWith('data:')) continue;
+                            const data = line.slice(5).trim();
+                            if (data === '[DONE]') continue;
+
+                            try {
+                                const jsonData = JSON.parse(data);
+                                if (jsonData && jsonData.content !== undefined) {
+                                    fullContent += jsonData.content;
+                                }
+                            } catch (jsonError) {
+                                console.warn('解析JSON数据时出错:', jsonError);
+                                console.warn('问题数据:', line);
+                            }
+                        }
+                    }
+
+                    console.log('获取到的完整响应:', fullContent);
+
+                    // 更新建议显示
+                    this.reportCache.set(sessionId, fullContent);
+                    suggestionsDiv.innerHTML = fullContent;
+
+                    // 重新渲染数学公式
+                    if (window.MathJax && window.MathJax.typesetPromise) {
+                        console.log('开始渲染数学公式...');
+                        await window.MathJax.typesetPromise([suggestionsDiv]);
+                        console.log('数学公式渲染完成');
+                    }
+                }
+            }
+
+            console.log('==================== 刷新报告完成 ====================');
+        } catch (error) {
+            console.error('刷新报告数据时出错:', error);
+            console.error('错误堆栈:', error.stack);
+            showSystemMessage('刷新报告数据时出错: ' + error.message, 'error');
+        }
+    }
+
     // 获取主题改进建议
     async fetchImprovementSuggestions(sessionId, questionsList) {
+        console.log('获取学习建议，会话ID:', sessionId);
+        console.log('问题列表:', questionsList);
+        
         try {
+            if (!questionsList || questionsList.length === 0) {
+                return '<p style="color: #666;">当前会话暂无提问记录，无法生成建议</p>';
+            }
+
+            // 构建请求内容
+            const prompt = `基于以下学习历史，请分析我需要加强哪些主题，并给出具体的改进建议：\n${
+                questionsList.map(q => `问题：${q.question}\n时间：${q.timestamp}\n`).join('\n')
+            }`;
+
+            // 发送请求到服务器
             const response = await fetch('/chat/stream', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({
-                    question: `基于以下学习历史，请分析我需要加强哪些主题，并给出具体的改进建议：\n${
-                        questionsList.map(q => `问题：${q.question}\n时间：${q.timestamp}\n主题：${q.topics.join(', ')}\n`).join('\n')
-                    }`,
+                    question: prompt,
                     sessionId: sessionId
                 })
             });
 
             if (!response.ok) {
-                throw new Error('获取建议失败');
+                throw new Error(`HTTP error! status: ${response.status}`);
             }
 
+            // 处理流式响应
             const reader = response.body.getReader();
             const decoder = new TextDecoder();
             let buffer = '';
-            let suggestions = '';
-            let messageContainer = null;
+            let fullContent = '';
 
             while (true) {
-                const {value, done} = await reader.read();
-                if (done) break;
-
-                buffer += decoder.decode(value, {stream: true});
+                const { done, value } = await reader.read();
+                
+                if (done) {
+                    break;
+                }
+                
+                // 解码当前块
+                buffer += decoder.decode(value, { stream: true });
+                
+                // 按行分割
                 const lines = buffer.split('\n');
+                // 保留最后一个可能不完整的行
                 buffer = lines.pop() || '';
-
+                
+                // 处理完整的行
                 for (const line of lines) {
                     if (!line.trim()) continue;
-
+                    
                     if (line.startsWith('data:')) {
+                        const data = line.slice(5).trim();
+                        
+                        // 如果是[DONE]标记，跳过
+                        if (data === '[DONE]') {
+                            continue;
+                        }
+                        
                         try {
-                            const data = line.slice(5).trim();
-                            
-                            // 如果是[DONE]标记，结束处理
-                            if (data === '[DONE]') {
-                                console.log('收到[DONE]标记，处理完成');
-                                continue;
-                            }
-                            
-                            // 尝试解析JSON数据
                             const jsonData = JSON.parse(data);
-                            
                             if (jsonData && jsonData.content !== undefined) {
-                                suggestions += jsonData.content;
-                                
-                                // 使用marked处理Markdown格式
-                                const suggestionsDiv = document.getElementById('improvement-suggestions');
-                                if (suggestionsDiv) {
-                                    try {
-                                        // 保护数学公式
-                                        const mathExpressions = [];
-                                        let mathIndex = 0;
-
-                                        // 临时替换数学公式
-                                        const contentWithPlaceholders = suggestions.replace(/(\$\$[\s\S]*?\$\$|\$[^\$\n]+\$|\\begin\{[^}]+\}[\s\S]*?\\end\{[^}]+\}|\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\))/g, (match) => {
-                                            mathExpressions.push(match);
-                                            return `%%MATH_EXPR_${mathIndex++}%%`;
-                                        });
-
-                                        // 使用marked渲染Markdown
-                                        let htmlContent = marked.parse(contentWithPlaceholders);
-
-                                        // 恢复数学公式
-                                        htmlContent = htmlContent.replace(/%%MATH_EXPR_(\d+)%%/g, (_, index) => mathExpressions[index]);
-
-                                        suggestionsDiv.innerHTML = htmlContent;
-
-                                        // 触发MathJax重新渲染
-                                        if (window.MathJax && window.MathJax.typesetPromise) {
-                                            window.MathJax.typesetPromise([suggestionsDiv]).catch((err) => {
-                                                console.error('MathJax渲染错误:', err);
-                                            });
-                                        }
-                                    } catch (renderError) {
-                                        console.error('渲染建议内容时出错:', renderError);
-                                        suggestionsDiv.innerHTML = suggestions; // 降级为纯文本显示
-                                    }
-                                }
+                                fullContent += jsonData.content;
                             }
                         } catch (jsonError) {
-                            console.warn('解析JSON数据时出错，尝试继续处理:', jsonError);
+                            console.warn('解析JSON数据时出错:', jsonError);
                             continue;
                         }
                     }
                 }
             }
 
-            return suggestions || '暂无具体改进建议';
+            // 处理最后可能剩余的数据
+            if (buffer) {
+                const lines = buffer.split('\n');
+                for (const line of lines) {
+                    if (!line.trim() || !line.startsWith('data:')) continue;
+                    
+                    const data = line.slice(5).trim();
+                    if (data === '[DONE]') continue;
+                    
+                    try {
+                        const jsonData = JSON.parse(data);
+                        if (jsonData && jsonData.content !== undefined) {
+                            fullContent += jsonData.content;
+                        }
+                    } catch (jsonError) {
+                        console.warn('解析最后的JSON数据时出错:', jsonError);
+                    }
+                }
+            }
+
+            // 使用marked处理Markdown格式
+            let htmlContent;
+            try {
+                // 保护数学公式
+                const mathExpressions = [];
+                let mathIndex = 0;
+
+                // 临时替换数学公式
+                const contentWithPlaceholders = fullContent.replace(/(\$\$[\s\S]*?\$\$|\$[^\$\n]+\$|\\begin\{[^}]+\}[\s\S]*?\\end\{[^}]+\}|\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\))/g, (match) => {
+                    mathExpressions.push(match);
+                    return `%%MATH_EXPR_${mathIndex++}%%`;
+                });
+
+                // 使用marked渲染Markdown
+                htmlContent = marked.parse(contentWithPlaceholders);
+
+                // 恢复数学公式
+                htmlContent = htmlContent.replace(/%%MATH_EXPR_(\d+)%%/g, (_, index) => mathExpressions[index]);
+            } catch (renderError) {
+                console.error('渲染Markdown内容时出错:', renderError);
+                htmlContent = fullContent; // 如果渲染失败，使用原始内容
+            }
+
+            // 返回格式化后的HTML内容
+            return `<div class="suggestions-content">
+                ${htmlContent}
+            </div>`;
+
         } catch (error) {
-            console.error('获取改进建议时出错:', error);
-            return '获取改进建议时出错，请稍后再试';
+            console.error('获取学习建议时出错:', error);
+            return '<div class="error-message">获取学习建议失败，请重试</div>';
         }
     }
 
@@ -648,10 +967,215 @@ class LearningAnalytics {
             return `${seconds}秒`;
         }
     }
+
+    // 添加数据同步检查方法
+    checkDataSync(sessionId) {
+        try {
+            // 从localStorage重新加载数据
+            const storedData = localStorage.getItem(this.STORAGE_KEY);
+            if (!storedData) {
+                console.warn('localStorage中没有找到数据');
+                return false;
+            }
+
+            const parsedData = JSON.parse(storedData);
+            const currentSessionData = parsedData.sessionAnalytics[sessionId];
+            const memorySessionData = this.data.sessionAnalytics[sessionId];
+
+            if (!currentSessionData || !memorySessionData) {
+                console.warn('会话数据不完整');
+                return false;
+            }
+
+            // 比较问题数量
+            const storedQuestionCount = currentSessionData.questions?.length || 0;
+            const memoryQuestionCount = memorySessionData.questions?.length || 0;
+
+            if (storedQuestionCount !== memoryQuestionCount) {
+                console.log('检测到数据不同步，正在同步...');
+                this.data = parsedData;
+                return false;
+            }
+
+            return true;
+        } catch (error) {
+            console.error('检查数据同步时出错:', error);
+            return false;
+        }
+    }
+
+    // 创建报告模态框
+    createReportModal(sessionId) {
+        const modalDiv = document.createElement('div');
+        modalDiv.className = 'report-modal';
+        modalDiv.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 10000;
+        `;
+
+        // 生成报告内容
+        const content = document.createElement('div');
+        content.className = 'report-modal-content';
+        content.style.cssText = `
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            max-width: 800px;
+            width: 90%;
+            max-height: 90vh;
+            overflow-y: auto;
+            position: relative;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        `;
+
+        // 添加关闭按钮
+        const closeButton = document.createElement('button');
+        closeButton.innerHTML = '&times;';
+        closeButton.className = 'close-button';
+        closeButton.style.cssText = `
+            position: absolute;
+            right: 10px;
+            top: 10px;
+            font-size: 24px;
+            cursor: pointer;
+            background: none;
+            border: none;
+            color: #666;
+        `;
+
+        // 添加刷新按钮
+        const refreshButton = document.createElement('button');
+        refreshButton.innerHTML = '🔄 刷新';
+        refreshButton.className = 'refresh-button';
+        refreshButton.style.cssText = `
+            position: absolute;
+            right: 50px;
+            top: 10px;
+            padding: 5px 10px;
+            font-size: 14px;
+            cursor: pointer;
+            background: #1a73e8;
+            border: none;
+            border-radius: 4px;
+            color: white;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            transition: background-color 0.3s;
+        `;
+
+        // 获取提问历史
+        const questions = this.data.sessionAnalytics[sessionId]?.questions || [];
+        const questionsList = questions.map(q => ({
+            question: q.question,
+            timestamp: new Date(q.timestamp).toLocaleString(),
+            topics: q.topics || []
+        }));
+
+        // 生成报告HTML
+        const reportContent = document.createElement('div');
+        reportContent.className = 'learning-report';
+        reportContent.innerHTML = `
+            <h3 style="margin-bottom: 20px; color: #333;">学习报告</h3>
+            
+            <div class="report-section" style="margin-bottom: 20px; padding: 15px; background: #f8f9fa; border-radius: 8px;">
+                <h4 style="color: #1a73e8; margin-bottom: 15px;">提问历史</h4>
+                <div id="questions-history" style="max-height: 300px; overflow-y: auto;">
+                    ${questionsList.map(q => `
+                        <div style="margin-bottom: 15px; padding: 10px; background: white; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                            <p style="margin: 0; color: #666; font-size: 0.9em;">${q.timestamp}</p>
+                            <p style="margin: 5px 0; color: #333;">${q.question}</p>
+                            <p style="margin: 0; color: #666; font-size: 0.9em;">主题: ${q.topics.join(', ') || '未分类'}</p>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+
+            <div class="report-section" style="margin-bottom: 20px; padding: 15px; background: #f8f9fa; border-radius: 8px;">
+                <h4 style="color: #1a73e8; margin-bottom: 15px;">需要加强的主题</h4>
+                <div id="improvement-suggestions" style="min-height: 50px;">
+                    <p style="color: #666;">正在分析学习数据...</p>
+                </div>
+            </div>
+        `;
+
+        // 组装模态框
+        content.appendChild(closeButton);
+        content.appendChild(refreshButton);
+        content.appendChild(reportContent);
+        modalDiv.appendChild(content);
+
+        return modalDiv;
+    }
+
+    // 更新报告内容
+    updateReportContent(modalDiv, report) {
+        const contentDiv = modalDiv.querySelector('.report-modal-content');
+        contentDiv.innerHTML = `
+            <h3 style="margin-bottom: 20px; color: #333;">学习报告</h3>
+            
+            <div class="report-section" style="margin-bottom: 20px; padding: 15px; background: #f8f9fa; border-radius: 8px;">
+                <h4 style="color: #1a73e8; margin-bottom: 15px;">提问历史</h4>
+                <div id="questions-history" style="max-height: 300px; overflow-y: auto;">
+                    ${report.questions.map(q => `
+                        <div style="margin-bottom: 15px; padding: 10px; background: white; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                            <p style="margin: 0; color: #666; font-size: 0.9em;">${q.timestamp}</p>
+                            <p style="margin: 5px 0; color: #333;">${q.question}</p>
+                            <p style="margin: 0; color: #666; font-size: 0.9em;">主题: ${q.topics.join(', ') || '未分类'}</p>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+
+            <div class="report-section" style="margin-bottom: 20px; padding: 15px; background: #f8f9fa; border-radius: 8px;">
+                <h4 style="color: #1a73e8; margin-bottom: 15px;">需要加强的主题</h4>
+                <div id="improvement-suggestions" style="min-height: 50px;">
+                    ${report.weakTopics.map(topic => `
+                        <p style="color: #666;">${topic.message}</p>
+                    `).join('')}
+                </div>
+            </div>
+
+            <div class="report-section" style="margin-bottom: 20px; padding: 15px; background: #f8f9fa; border-radius: 8px;">
+                <h4 style="color: #1a73e8; margin-bottom: 15px;">建议的学习资源</h4>
+                <div id="suggested-resources" style="min-height: 50px;">
+                    ${report.suggestedResources.map(resource => `
+                        <p style="color: #666;">${resource.resources.map(res => `<a href="${res}" target="_blank">${res}</a>`).join(', ')}</p>
+                    `).join('')}
+                </div>
+            </div>
+
+            <div class="report-section" style="margin-bottom: 20px; padding: 15px; background: #f8f9fa; border-radius: 8px;">
+                <h4 style="color: #1a73e8; margin-bottom: 15px;">学习路径建议</h4>
+                <div id="learning-path" style="min-height: 50px;">
+                    ${report.learningPath.map(step => `
+                        <p style="color: #666;">${step.steps.join(' -> ')}</p>
+                    `).join('')}
+                </div>
+            </div>
+
+            <div class="report-section" style="margin-bottom: 20px; padding: 15px; background: #f8f9fa; border-radius: 8px;">
+                <h4 style="color: #1a73e8; margin-bottom: 15px;">时间管理建议</h4>
+                <div id="time-management" style="min-height: 50px;">
+                    ${report.timeManagement.map(tip => `
+                        <p style="color: #666;">${tip}</p>
+                    `).join('')}
+                </div>
+            </div>
+        `;
+    }
 }
 
-// 导出学习分析器实例
-window.learningAnalytics = new LearningAnalytics();
+// 创建学习分析实例
+const learningAnalytics = new LearningAnalytics();
 
 document.addEventListener('DOMContentLoaded', () => {
     // 获取必要的DOM元素
@@ -785,7 +1309,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const historyList = document.querySelector('.history-nav ul');
         if (!historyList) return;
         
-        console.log('添加会话到历史记录:', chatName, sessionId); // 调试输出
+        console.log('添加会话到历史记录:', chatName, sessionId, '是否激活:', isActive); // 调试输出
         
         // 检查是否已存在此会话ID的对话
         const existingChat = document.querySelector(`.chat-link[data-chat-id="${sessionId}"]`);
@@ -806,9 +1330,20 @@ document.addEventListener('DOMContentLoaded', () => {
         const chatLink = document.createElement('a');
         chatLink.href = `/chat/s/${sessionId}`;
         chatLink.className = 'chat-link';
-        if (isActive) chatLink.classList.add('active');
-        chatLink.setAttribute('data-chat-id', sessionId); // 确保设置data-chat-id属性
-        chatLink.textContent = chatName;
+        if (isActive) {
+            // 移除其他链接的active状态
+            document.querySelectorAll('.chat-link').forEach(link => {
+                link.classList.remove('active');
+            });
+            chatLink.classList.add('active');
+        }
+        chatLink.setAttribute('data-chat-id', sessionId);
+
+        // 创建标题容器
+        const titleSpan = document.createElement('span');
+        titleSpan.className = 'chat-title';
+        titleSpan.textContent = chatName;
+        chatLink.appendChild(titleSpan);
 
         // 添加会话管理按钮
         const deleteButton = document.createElement('button');
@@ -820,7 +1355,7 @@ document.addEventListener('DOMContentLoaded', () => {
             e.preventDefault();
             e.stopPropagation();
             deleteChatHistory(sessionId, chatItem);
-            return false; // 阻止事件冒泡
+            return false;
         };
 
         chatLink.appendChild(deleteButton);
@@ -1385,26 +1920,48 @@ document.addEventListener('DOMContentLoaded', () => {
         event.preventDefault();
         const question = elements.messageInput.value.trim();
         
-        if (!question) return;
-        
-        try {
-            // 记录问题到学习分析系统
-            if (window.learningAnalytics) {
-                window.learningAnalytics.recordQuestion(question, sessionId);
+        // 检查消息是否为空
+        if (!question) {
+            // 消息为空，不提交
+            console.log('消息为空，不提交');
+            // 针对移动设备，添加振动反馈（如果支持）
+            if (navigator.vibrate) {
+                navigator.vibrate(100); // 轻微振动100毫秒
             }
-            
-            // 原有的提交逻辑
-            setInputState(false);
+            return; // 直接返回，不执行后续代码
+        }
+        
+            // 立即清空并重置输入框
             elements.messageInput.value = '';
-            adjustTextareaHeight(elements.messageInput);
+            elements.messageInput.style.height = 'auto';
+            elements.messageInput.style.height = `${Math.min(elements.messageInput.scrollHeight, 200)}px`;
             
+            // 禁用输入和发送按钮
+            setInputState(false);
+            
+            try {
+            // 获取当前会话ID
+            const sessionId = getSessionIdFromUrl();
+            
+            // 记录问题到学习分析系统
+            learningAnalytics.recordQuestion(question, sessionId);
+            
+            // 检查是否是第一条消息
+            const isFirstMessage = elements.chatMessages.children.length === 0;
+            
+            // 发送消息
                 await askQuestionStreamPost(question);
+            
+            // 如果是第一条消息，将其作为对话标题
+            if (isFirstMessage) {
+                // 使用前20个字符作为标题，如果超过20字符则添加省略号
+                const title = question.length > 20 ? question.substring(0, 20) + '...' : question;
+                updateChatTitle(title);
+            }
             } catch (error) {
-            console.error('提交问题时出错:', error);
-            showErrorMessage(error);
-        } finally {
+                console.error('发送消息时出错:', error);
+                showSystemMessage('发送消息失败，请重试', 'error');
                 setInputState(true);
-            focusInput();
         }
     }
 
@@ -1739,8 +2296,13 @@ document.addEventListener('DOMContentLoaded', () => {
         // 生成新的会话ID
         const newSessionId = generateSessionId();
         
+        // 移除所有活动状态
+        document.querySelectorAll('.chat-link').forEach(link => {
+            link.classList.remove('active');
+        });
+        
         // 先在侧边栏添加新对话
-        addChatToHistory('新对话', newSessionId);
+        addChatToHistory('新对话', newSessionId, true);  // 确保设置为活动状态
         
         // 更新当前会话ID
         sessionId = newSessionId;
@@ -2764,7 +3326,7 @@ document.addEventListener('DOMContentLoaded', () => {
         console.log('- 上传文件选项:', elements.uploadFileOption);
         console.log('- 文件上传输入:', elements.fileUpload);
 
-        // 设置上传菜单事件
+        // 设置上传菜单事件1
         setupUploadMenu();
         
         // 设置作业上传事件监听
@@ -2809,6 +3371,7 @@ document.addEventListener('DOMContentLoaded', () => {
         elements.showReportButton.addEventListener('click', function() {
             console.log('学习报告按钮被点击');
             try {
+                const sessionId = getSessionIdFromUrl();
                 if (!sessionId) {
                     console.error('无法获取会话ID');
                     showSystemMessage('无法获取会话ID，请确保您在有效的聊天会话中', 'error');
@@ -2816,12 +3379,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
                 
                 console.log('当前会话ID:', sessionId);
-                if (window.learningAnalytics) {
-                    window.learningAnalytics.displayLearningReport(sessionId);
-                } else {
-                    console.error('学习分析模块未加载');
-                    showSystemMessage('学习分析功能未准备就绪，请刷新页面后重试', 'error');
-                }
+                learningAnalytics.displayLearningReport(sessionId);
             } catch (error) {
                 console.error('显示学习报告时出错:', error);
                 showSystemMessage('显示学习报告时出错: ' + error.message, 'error');
