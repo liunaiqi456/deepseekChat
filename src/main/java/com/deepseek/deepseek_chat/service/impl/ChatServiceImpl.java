@@ -27,7 +27,7 @@ public class ChatServiceImpl implements ChatService {
     
     private static final Logger logger = LoggerFactory.getLogger(ChatServiceImpl.class);
     
-    @Value("${dashscope.api.key}")
+    @Value("$DASHSCOPE_API_KEY")
     private String apiKey;
     
     @Autowired

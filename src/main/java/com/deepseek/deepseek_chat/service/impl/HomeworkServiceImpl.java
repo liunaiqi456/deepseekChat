@@ -45,7 +45,7 @@ public class HomeworkServiceImpl implements HomeworkService, Serializable {
     @Value("${file.upload-dir:${user.home}/deepseek/uploads}")
     private String uploadDir;
     
-    @Value("${dashscope.api.key}")
+    @Value("$DASHSCOPE_API_KEY")
     private String apiKey;
     
     // 讯飞OCR相关配置

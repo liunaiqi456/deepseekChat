@@ -27,7 +27,7 @@ public class DeepSeekServiceImpl implements DeepSeekService {
     @Autowired
     private Generation generation;
 
-    @Value("${dashscope.api.key}")
+    @Value("$DASHSCOPE_API_KEY")
     private String apiKey;
 
     private String escapeContent(String content) {

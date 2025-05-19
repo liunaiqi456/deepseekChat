@@ -31,3 +31,10 @@ build/
 
 ### VS Code ###
 .vscode/
+/.apt_generated_tests/
+src/.DS_Store
+src/main/.DS_Store
+src/main/java/.DS_Store
+src/main/java/com/.DS_Store
+src/main/java/com/deepseek/.DS_Store
+.DS_Store
