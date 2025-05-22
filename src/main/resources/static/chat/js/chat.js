@@ -1624,10 +1624,9 @@ document.addEventListener('DOMContentLoaded', () => {
         // 如果是移动设备，按下Enter键时插入换行
         if (isMobile) {
             if (event.key === 'Enter') {
-                // 阻止默认行为（提交表单和自动插入换行）
-            event.preventDefault();
-                
-                // 在移动设备上，默认Enter键插入换行
+                // 阻止默认行为（防止表单提交）
+                event.preventDefault();
+                // 插入换行符
                 insertNewline(event.target);
                 return;
             }

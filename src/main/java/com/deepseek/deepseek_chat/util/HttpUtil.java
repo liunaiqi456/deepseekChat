@@ -7,6 +7,7 @@ import java.io.BufferedReader;
 import java.io.DataOutputStream;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
+import java.net.URI;
 import java.net.URL;
 import java.net.URLConnection;
 import java.util.Map;
@@ -33,7 +34,7 @@ public class HttpUtil {
 		HttpURLConnection conn = null;
 		BufferedReader reader = null;
 		try {
-			URL url = new URL(requestUrl);
+			URL url = new URI(requestUrl).toURL();
 			conn = (HttpURLConnection) url.openConnection();
 			conn.setRequestMethod("POST");
 			conn.setDoOutput(true);
@@ -91,7 +92,7 @@ public class HttpUtil {
 		BufferedReader in = null;
 		try {
 			// 设置 url
-			URL realUrl = new URL(url);
+			URL realUrl = new URI(url).toURL();
 			URLConnection connection = realUrl.openConnection();
 			// 设置 header
 			for (String key : header.keySet()) {
