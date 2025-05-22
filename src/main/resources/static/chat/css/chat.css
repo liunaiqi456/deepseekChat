@@ -396,26 +396,29 @@ body, html {
     box-shadow: none;
 }
 
-#send-button {
-    height: 100%;
-    min-height: 44px;
+.circle-btn {
     border: none;
-    border-radius: 0 var(--border-radius-lg) var(--border-radius-lg) 0;
-    padding: 0 1.25rem;
-    background-color: var(--color-primary);
-    color: white;
-    font-weight: 500;
-    transition: background-color 0.2s ease;
-}
-
-#send-button:not(:disabled):hover {
-    background-color: var(--color-primary-dark);
+    background: none;
+    padding: 0;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     cursor: pointer;
+    transition: box-shadow 0.2s;
 }
 
-#send-button:disabled {
-    background-color: #e2e8f0;
-    color: #a0aec0;
+.circle-btn:active {
+    box-shadow: 0 0 0 2px #007bff33;
+}
+
+#send-button[disabled] svg circle {
+    fill: #b3d1ff;
+}
+
+#send-button[disabled] {
     cursor: not-allowed;
 }
 
@@ -502,22 +505,6 @@ body, html {
     /* 确保输入框不遮挡内容 */
     .chat-messages {
         padding-bottom: 150px !important; /* 添加额外的内容区底部空间 */
-    }
-    
-    /* 增强移动设备上发送按钮的可见性 */
-    #send-button {
-        min-height: 44px;
-        min-width: 60px;
-        font-size: 16px;
-        padding: 0 1rem;
-        background-color: var(--color-primary);
-        color: white;
-        border-radius: 0 var(--border-radius-lg) var(--border-radius-lg) 0;
-    }
-    
-    /* 确保发送按钮触摸面积足够大 */
-    #send-button:not(:disabled) {
-        background-color: var(--color-primary);
     }
     
     /* 确保输入框在移动设备上有足够大的字体 */

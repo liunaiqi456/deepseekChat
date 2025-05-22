@@ -234,11 +234,18 @@
                             placeholder="输入消息，Shift+Enter换行" 
                             aria-label="聊天输入框"
                             rows="1"></textarea>
-                    <button id="send-button" 
-                            class="btn btn-primary" 
-                            type="submit" 
-                            disabled 
-                            aria-label="发送消息">发送</button>
+                    <button id="send-button" class="circle-btn" type="submit" aria-label="发送消息" disabled>
+                        <svg width="28" height="28" viewBox="0 0 28 28">
+                            <circle cx="14" cy="14" r="14" fill="#007bff"/>
+                            <polygon points="11,8 20,14 11,20" fill="#fff"/>
+                        </svg>
+                    </button>
+                    <button id="stop-button" class="circle-btn" type="button" style="display:none;margin-left:8px;" aria-label="停止接收">
+                        <svg width="28" height="28" viewBox="0 0 28 28">
+                            <circle cx="14" cy="14" r="14" fill="#fff" stroke="#ff4d4f" stroke-width="2"/>
+                            <rect x="9" y="9" width="10" height="10" fill="#ff4d4f"/>
+                        </svg>
+                    </button>
                 </div>
             </form>
         </footer>

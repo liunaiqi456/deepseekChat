@@ -1192,7 +1192,8 @@ document.addEventListener('DOMContentLoaded', () => {
         uploadMenu: document.getElementById('upload-menu'),
         uploadFileOption: document.getElementById('upload-file-option'),
         fileUpload: document.getElementById('file-upload'),
-        showReportButton: document.getElementById('show-report')  // 添加学习报告按钮
+        showReportButton: document.getElementById('show-report'),  // 添加学习报告按钮
+        stopButton: document.getElementById('stop-button')  // 添加停止按钮
     };
 
     // 用于存储聊天历史的键
@@ -1831,13 +1832,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // 只在第一次尝试时显示用户消息，避免重复显示
             if (retryCount === 3) {
-            addMessage(question, 'user');
+                addMessage(question, 'user');
             }
-            
+
             // 禁用输入，表示正在处理
             setInputState(false);
             showSystemMessage(retryCount === 3 ? '正在思考...' : `正在重试(${3-retryCount}/3)...`, retryCount === 3 ? 'info' : 'warning');
-            
+
+            // 显示停止按钮
+            elements.stopButton.style.display = '';
+
+            // 创建AbortController
+            streamAbortController = new AbortController();
+
             // 发送请求
             const response = await fetch('/chat/stream', {
                 method: 'POST',
@@ -1847,7 +1854,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 body: JSON.stringify({ 
                     question: question,
                     sessionId: sessionId || ''  // 确保sessionId不为undefined
-                })
+                }),
+                signal: streamAbortController.signal
             });
 
             // 处理HTTP错误
@@ -1864,8 +1872,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // 读取流
             while (true) {
+                if (streamAbortController.signal.aborted) {
+                    // 终止流式响应
+                    break;
+                }
                 const {value, done} = await reader.read();
-                
                 if (done) {
                     console.log('流读取完成');
                     break;
@@ -1874,40 +1885,29 @@ document.addEventListener('DOMContentLoaded', () => {
                 // 解码新的数据块
                 const chunk = decoder.decode(value, {stream: true});
                 if (!chunk) continue;  // 跳过空块
-                
                 buffer += chunk;
 
                 try {
                     // 按行分割并处理每一行
-                const lines = buffer.split('\n');
-                buffer = lines.pop() || '';
+                    const lines = buffer.split('\n');
+                    buffer = lines.pop() || '';
 
                     for (const line of lines) {
                         if (!line || !line.trim()) continue;  // 跳过空行
-
-                        // 处理data行
                         if (line.startsWith('data:')) {
                             const data = line.slice(5).trim();
-                    
-                    // 如果是[DONE]标记，结束处理
                             if (data === '[DONE]') {
-                        console.log('收到[DONE]标记，处理完成');
-                        continue;
-                    }
-                    
-                            // 尝试解析JSON数据
+                                console.log('收到[DONE]标记，处理完成');
+                                break;
+                            }
                             try {
                                 const jsonData = JSON.parse(data);
-                                
-                                // 创建消息容器（如果还没有）
-                            if (!messageContainer) {
+                                if (!messageContainer) {
                                     messageContainer = createMessageElement('assistant', '');
                                     if (elements.chatMessages) {
                                         elements.chatMessages.appendChild(messageContainer);
                                     }
                                 }
-
-                                // 更新消息内容
                                 if (jsonData && jsonData.content !== undefined) {
                                     currentMessage += jsonData.content;
                                     if (messageContainer) {
@@ -1916,31 +1916,28 @@ document.addEventListener('DOMContentLoaded', () => {
                                 }
                             } catch (jsonError) {
                                 console.warn('JSON解析失败:', jsonError);
+                            }
+                        }
                     }
-                }
-            }
-        } catch (error) {
+                } catch (error) {
                     console.error('处理消息时出错:', error);
                 }
             }
 
             setInputState(true);
             showSystemMessage('处理完成', 'success');
-
+            elements.stopButton.style.display = 'none';
+            streamAbortController = null;
         } catch (error) {
-            console.error('请求出错:', error);
-            showSystemMessage(error.message, 'error');
-
-            if (retryCount > 0) {
-                console.log(`还剩 ${retryCount} 次重试机会`);
-                // 等待一段时间再重试，时间随重试次数增加
-                const delay = (3 - retryCount + 1) * 1000;
-                await new Promise(resolve => setTimeout(resolve, delay));
-                return askQuestionStreamPost(question, retryCount - 1);
+            if (error.name === 'AbortError') {
+                showSystemMessage('已停止接收', 'warning');
+            } else {
+                console.error('请求出错:', error);
+                showSystemMessage(error.message, 'error');
             }
-
             setInputState(true);
-            showSystemMessage('重试次数已用完，请重新发送消息', 'error');
+            elements.stopButton.style.display = 'none';
+            streamAbortController = null;
         }
     }
 
@@ -3711,5 +3708,25 @@ document.addEventListener('DOMContentLoaded', () => {
             showSystemMessage('文件上传失败：' + error.message, 'error');
             throw error;
         }
+    }
+
+    // 停止按钮事件监听
+    elements.stopButton = document.getElementById('stop-button');
+    if (elements.stopButton) {
+        elements.stopButton.addEventListener('click', function() {
+            if (streamAbortController) {
+                streamAbortController.abort();
+                // 发送停止指令到后端
+                fetch('/chat/stop', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ sessionId: sessionId })
+                });
+            }
+            elements.stopButton.style.display = 'none';
+            setInputState(true);
+        });
     }
 });

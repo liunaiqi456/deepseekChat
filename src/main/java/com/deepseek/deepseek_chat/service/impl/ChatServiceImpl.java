@@ -21,6 +21,7 @@ import java.util.List;
 import org.springframework.beans.factory.annotation.Autowired;
 import io.reactivex.Flowable;
 import java.lang.StringBuilder;
+import io.reactivex.disposables.Disposable;
 
 @Service
 public class ChatServiceImpl implements ChatService {
@@ -35,6 +36,9 @@ public class ChatServiceImpl implements ChatService {
     
     // 使用 ConcurrentHashMap 存储会话历史
     private final ConcurrentHashMap<String, List<Message>> sessionHistory = new ConcurrentHashMap<>();
+    
+    // 保存每个sessionId的流式订阅
+    private final Map<String, Disposable> streamDisposables = new ConcurrentHashMap<>();
     
     // 创建统一的模型参数配置方法
     private GenerationParam createGenerationParam(List<Message> messages, boolean isStreaming) {
@@ -175,64 +179,65 @@ public class ChatServiceImpl implements ChatService {
     @Override
     public void streamChat(String question, String sessionId, ChatCallback callback) {
         try {
-            // 获取或创建会话历史
             final List<Message> messages = new ArrayList<>(sessionHistory.computeIfAbsent(sessionId, k -> {
                 List<Message> newHistory = new ArrayList<>();
-                // 添加系统提示词
                 newHistory.add(Message.builder()
                     .role(Role.SYSTEM.getValue())
                     .content(SYSTEM_PROMPT)
                     .build());
                 return newHistory;
             }));
-
-            // 添加用户问题
             Message userMessage = Message.builder()
                     .role(Role.USER.getValue())
                     .content(question)
                     .build();
             messages.add(userMessage);
-
-            // 使用统一的参数配置方法
             GenerationParam param = createGenerationParam(messages, true);
-
-            // 创建Generation实例
             Generation gen = new Generation();
-            
-            // 使用流式调用
             Flowable<GenerationResult> result = gen.streamCall(param);
             StringBuilder finalContent = new StringBuilder();
-            
-            result.blockingForEach(message -> {
-                try {
-                    String content = message.getOutput().getChoices().get(0).getMessage().getContent();
-                    if (!content.isEmpty()) {
-                        // 发送增量内容
-                        callback.onMessage(content);
-                        finalContent.append(content);
+            Disposable disposable = result.subscribe(
+                message -> {
+                    try {
+                        String content = message.getOutput().getChoices().get(0).getMessage().getContent();
+                        if (!content.isEmpty()) {
+                            callback.onMessage(content);
+                            finalContent.append(content);
+                        }
+                    } catch (Exception e) {
+                        logger.error("处理流式响应时出错", e);
+                        callback.onError(e);
                     }
-                } catch (Exception e) {
-                    logger.error("处理流式响应时出错", e);
-                    callback.onError(e);
+                },
+                error -> {
+                    logger.error("流式聊天处理出错", error);
+                    callback.onError(error);
+                    streamDisposables.remove(sessionId);
+                },
+                () -> {
+                    Message assistantMessage = Message.builder()
+                            .role(Role.ASSISTANT.getValue())
+                            .content(finalContent.toString())
+                            .build();
+                    messages.add(assistantMessage);
+                    sessionHistory.put(sessionId, new ArrayList<>(messages));
+                    callback.onComplete();
+                    streamDisposables.remove(sessionId);
                 }
-            });
-
-            // 保存到历史记录
-            Message assistantMessage = Message.builder()
-                    .role(Role.ASSISTANT.getValue())
-                    .content(finalContent.toString())
-                    .build();
-            messages.add(assistantMessage);
-            
-            // 更新会话历史
-            sessionHistory.put(sessionId, new ArrayList<>(messages));
-            
-            // 完成回调
-            callback.onComplete();
-            
+            );
+            streamDisposables.put(sessionId, disposable);
         } catch (Exception e) {
             logger.error("流式聊天处理出错", e);
             callback.onError(e);
+        }
+    }
+
+    @Override
+    public void stopStream(String sessionId) {
+        Disposable disposable = streamDisposables.remove(sessionId);
+        if (disposable != null && !disposable.isDisposed()) {
+            disposable.dispose();
+            logger.info("已停止sessionId={}的流式响应", sessionId);
         }
     }
 

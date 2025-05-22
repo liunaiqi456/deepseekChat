@@ -5,6 +5,7 @@ import com.alibaba.dashscope.common.Message;
 import com.alibaba.dashscope.exception.InputRequiredException;
 import com.alibaba.dashscope.exception.NoApiKeyException;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import org.slf4j.Logger;
@@ -164,6 +165,13 @@ public class ChatController {
                 logger.error("清理会话 {} 的上传文件时出错", sessionId, e);
             }
         });
+    }
+
+    @PostMapping("/stop")
+    public ResponseEntity<String> stopStream(@RequestBody Map<String, String> request) {
+        String sessionId = request.get("sessionId");
+        chatService.stopStream(sessionId);
+        return ResponseEntity.ok("stopped");
     }
 }
 

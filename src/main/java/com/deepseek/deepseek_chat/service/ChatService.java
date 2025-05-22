@@ -16,6 +16,7 @@ public interface ChatService {
     void streamChat(String question, String sessionId, ChatCallback callback);
     void clearHistory(String sessionId);
     List<Message> getHistory(String sessionId);
+    void stopStream(String sessionId);
 
     // 回调接口定义
     interface ChatCallback {
