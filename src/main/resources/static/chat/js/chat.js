@@ -2975,23 +2975,18 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             updateSessionStatus(SessionStatus.INITIALIZING);
-            
             console.log('开始处理作业上传，文件列表:', files);
-            
             // 使用Array.from之前进行类型检查
             const filesList = files.length !== undefined ? Array.from(files) : [];
             console.log('转换后的文件列表:', filesList);
-            
             if (filesList.length === 0) {
                 showSystemMessage('请选择作业文件', 'error');
                 return;
             }
-            
             if (filesList.length > 5) {
                 showSystemMessage('一次最多只能上传5张图片', 'error');
                 return;
             }
-
             // 检查每个文件对象的有效性
             for (let file of filesList) {
                 if (!file || typeof file !== 'object') {
@@ -2999,23 +2994,35 @@ document.addEventListener('DOMContentLoaded', () => {
                     showSystemMessage('文件上传失败：文件格式错误', 'error');
                     return;
                 }
-
                 console.log('检查文件:', file.name, '类型:', file.type, '大小:', file.size);
-                
                 if (!file.type || !file.type.startsWith('image/')) {
                     showSystemMessage('只能上传图片文件', 'error');
                     return;
                 }
-                
                 if (!file.size || file.size > 10 * 1024 * 1024) { // 10MB
                     showSystemMessage('图片大小不能超过10MB', 'error');
                     return;
                 }
             }
-            
+			// 优化：上传后立即在消息区显示图片预览（以用户身份）
+			const imagePromises = filesList.map(file => {
+			    return new Promise(resolve => {
+			        const reader = new FileReader();
+			        reader.onload = function(e) {
+			            resolve(`<img src="${e.target.result}" alt="${file.name}" style="max-width: 200px; max-height: 200px; border-radius: 8px; margin: 4px 8px 4px 0;">`);
+			        };
+			        reader.readAsDataURL(file);
+			    });
+			});
+			Promise.all(imagePromises).then(imgTags => {
+			    const messageDiv = createMessageElement('user', '');
+			    const contentDiv = messageDiv.querySelector('.message-content');
+			    contentDiv.innerHTML = imgTags.join('');
+			    elements.chatMessages.appendChild(messageDiv);
+			    scrollToBottom();
+			});
+            // 文件验证通过，显示科目选择对话框
             console.log('文件验证通过，显示科目选择对话框');
-            
-            // 显示科目选择对话框
             const subjectDialog = document.createElement('div');
             subjectDialog.className = 'subject-dialog';
             subjectDialog.innerHTML = `
@@ -3028,9 +3035,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     </div>
                 </div>
             `;
-            
             document.body.appendChild(subjectDialog);
-            
             // 处理科目选择
             subjectDialog.querySelectorAll('button').forEach(button => {
                 button.addEventListener('click', async () => {
@@ -3039,7 +3044,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         console.log('选择科目:', subject, '文件数量:', filesList.length);
                         document.body.removeChild(subjectDialog);
                         await uploadHomework(filesList, subject);
-        } catch (error) {
+                    } catch (error) {
                         console.error('处理科目选择时出错:', error);
                         showSystemMessage(`处理失败: ${error.message}`, 'error');
                     }
@@ -3730,3 +3735,12 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 });
+
+// 数学公式渲染函数
+function renderMathInElement(element, options) {
+    if (window.MathJax && window.MathJax.typesetPromise) {
+        window.MathJax.typesetPromise([element]).catch((err) => {
+            console.error('MathJax渲染错误:', err);
+        });
+    }
+}
