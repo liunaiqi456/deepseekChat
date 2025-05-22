@@ -1687,7 +1687,7 @@ document.addEventListener('DOMContentLoaded', () => {
 					.replace(/\*(.*?)\*/g, '<em>$1</em>')  // 斜体
 					.replace(/`([^`]+)`/g, '<code>$1</code>')  // 行内代码
 					.replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>')  // 代码块
-					.replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2">$1</a>')  // 链接
+					.replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" target="_blank">$1</a>')  // 链接
 					.replace(/^\s*[-*+]\s+(.+)$/gm, '<li>$1</li>')  // 无序列表
 					.replace(/^\s*\d+\.\s+(.+)$/gm, '<li>$1</li>')  // 有序列表
 					.replace(/(<li>.*<\/li>)/s, '<ul>$1</ul>')  // 包装列表
@@ -2527,6 +2527,14 @@ document.addEventListener('DOMContentLoaded', () => {
 					const type = flags.header ? 'th' : 'td';
 					const align = flags.align ? ` style="text-align: ${flags.align}"` : '';
 					return `<${type}${align}>${content || '-'}</${type}>\n`;
+				};
+
+				// 新增：自定义link渲染，所有链接都加target="_blank"
+				renderer.link = function(href, title, text) {
+					let out = `<a href="${href}" target="_blank" rel="noopener noreferrer"`;
+					if (title) out += ` title="${title}"`;
+					out += `>${text}</a>`;
+					return out;
 				};
 
 				// 配置marked选项
