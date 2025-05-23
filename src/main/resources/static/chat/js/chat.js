@@ -1619,38 +1619,26 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 处理键盘事件
     function handleKeyPress(event) {
-        // 检测是否为移动设备
         const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-        
-        // 如果是移动设备，按下Enter键时插入换行
-        if (isMobile) {
-            if (event.key === 'Enter') {
-                // 阻止默认行为（防止表单提交）
-                event.preventDefault();
-                // 插入换行符
-                insertNewline(event.target);
-                return;
-            }
-            return; // 其他按键正常处理
+        if (isMobile && event.key === 'Enter') {
+            // 阻止表单提交和冒泡
+            event.preventDefault();
+            event.stopPropagation();
+            insertNewline(event.target);
+            return false;
         }
-        
         // 桌面端处理：按下Enter键且没有按下Shift键和Alt键，则发送消息
         if (event.key === 'Enter' && !event.shiftKey && !event.altKey) {
-            event.preventDefault(); // 阻止默认行为
-            
-            // 检查消息是否为空
+            event.preventDefault();
             const isEmpty = !event.target.value.trim();
             if (!isEmpty) {
-                handleSubmit(event); // 如果消息不为空，则发送
+                handleSubmit(event);
             } else {
-                // 如果消息为空，可以添加振动反馈（如果支持）
                 if (navigator.vibrate) {
-                    navigator.vibrate(100); // 轻微振动提示
+                    navigator.vibrate(100);
                 }
             }
-        }
-        // 如果按下Enter键且按下Shift键或Alt键，则插入换行
-        else if (event.key === 'Enter' && (event.shiftKey || event.altKey)) {
+        } else if (event.key === 'Enter' && (event.shiftKey || event.altKey)) {
             event.preventDefault();
             insertNewline(event.target);
         }
@@ -1682,6 +1670,7 @@ document.addEventListener('DOMContentLoaded', () => {
 				console.warn('marked库未加载，使用基本渲染');
 				// 基本渲染：保留HTML标签和数学公式
 				const basicRenderedContent = content
+					.replace(/\r\n|\r/g, '\n') // 统一换行符，兼容Windows和Unix
 					.replace(/\n/g, '<br>')  // 换行转换为<br>
 					.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')  // 粗体
 					.replace(/\*(.*?)\*/g, '<em>$1</em>')  // 斜体
@@ -1944,6 +1933,11 @@ document.addEventListener('DOMContentLoaded', () => {
     // 处理表单提交
     async function handleSubmit(event) {
         event.preventDefault();
+        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+        if (isMobile) {
+            // 移动端不允许直接提交
+            return false;
+        }
         const question = elements.messageInput.value.trim();
         
         // 检查消息是否为空
@@ -3741,6 +3735,40 @@ document.addEventListener('DOMContentLoaded', () => {
             elements.stopButton.style.display = 'none';
             setInputState(true);
         });
+    }
+
+    // 新增：发送按钮点击事件监听
+    if (elements.sendButton) {
+        elements.sendButton.addEventListener('click', function(event) {
+            // 直接调用原有的handleSubmit逻辑，但不需要event.preventDefault()
+            handleSendButtonClick();
+        });
+    }
+
+    // 新增：将handleSubmit逻辑迁移为handleSendButtonClick
+    function handleSendButtonClick() {
+        const question = elements.messageInput.value.trim();
+        // 检查消息是否为空
+        if (!question) {
+            // 消息为空，不提交
+            console.log('消息为空，不提交');
+            if (navigator.vibrate) {
+                navigator.vibrate(100);
+            }
+            return;
+        }
+        // 立即清空并重置输入框
+        elements.messageInput.value = '';
+        elements.messageInput.style.height = 'auto';
+        elements.messageInput.style.height = `${Math.min(elements.messageInput.scrollHeight, 200)}px`;
+        setInputState(false);
+        try {
+            askQuestionStreamPost(question);
+        } catch (error) {
+            console.error('发送消息时出错:', error);
+            showSystemMessage('发送消息失败，请重试', 'error');
+            setInputState(true);
+        }
     }
 });
 

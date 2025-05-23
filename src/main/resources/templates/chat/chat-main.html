@@ -113,23 +113,23 @@
         function initializeEventListeners() {
             console.log('初始化事件监听器...');
             
-            // 监听表单提交
-            const chatForm = document.getElementById('chat-form');
             const messageInput = document.getElementById('message-input');
+            const sendButton = document.getElementById('send-button');
             const showReportButton = document.getElementById('show-report');
             
             console.log('找到的元素:', {
-                chatForm: !!chatForm,
                 messageInput: !!messageInput,
+                sendButton: !!sendButton,
                 showReportButton: !!showReportButton
             });
             
-            if (chatForm) {
-                chatForm.addEventListener('submit', function(e) {
-                    console.log('表单提交事件触发');
+            // 发送按钮点击事件
+            if (sendButton && messageInput) {
+                sendButton.addEventListener('click', function() {
                     const question = messageInput.value.trim();
                     if (question) {
                         recordUserQuestion(question);
+                        messageInput.value = '';
                     }
                 });
             }
@@ -234,7 +234,7 @@
                             placeholder="输入消息，Shift+Enter换行" 
                             aria-label="聊天输入框"
                             rows="1"></textarea>
-                    <button id="send-button" class="circle-btn" type="submit" aria-label="发送消息" disabled>
+                    <button id="send-button" class="circle-btn" type="button" aria-label="发送消息" disabled>
                         <svg width="28" height="28" viewBox="0 0 28 28">
                             <circle cx="14" cy="14" r="14" fill="#007bff"/>
                             <polygon points="11,8 20,14 11,20" fill="#fff"/>
