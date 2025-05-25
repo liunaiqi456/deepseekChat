@@ -2604,14 +2604,26 @@ document.addEventListener('DOMContentLoaded', () => {
 
 			// 首先配置MathJax
 			window.MathJax = {
-				tex: {
-					inlineMath: [['$', '$'], ['\\(', '\\)']],
-					displayMath: [['$$', '$$'], ['\\[', '\\]']],
-					packages: { '[+]': ['ams', 'noerrors'] }
-				},
-				options: {
-					skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre']
-				}
+			    tex: {
+			        inlineMath: [
+			            ['$', '$'],
+			            ['\\(', '\\)']  // 添加这行确保支持 \(...\) 格式
+			        ],
+			        displayMath: [
+			            ['$$', '$$'],
+			            ['\\[', '\\]']
+			        ],
+			        packages: ['base', 'ams', 'noerrors', 'noundefined']
+			    },
+			    options: {
+			        skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre']
+			    },
+			    startup: {
+			        ready: () => {
+			            console.log('MathJax is loaded and ready');
+			            MathJax.startup.defaultReady();
+			        }
+			    }
 			};
 
 			// 然后加载资源
@@ -3164,29 +3176,47 @@ document.addEventListener('DOMContentLoaded', () => {
                             }
                             
                             // 累积内容
-                            if (eventData.content) {
-                                fullContent += eventData.content;
-                                try {
-                                    // 实时渲染累积的内容
-                                    const renderedContent = marked.parse(fullContent);
-                                    messageContainer.querySelector('.message-content').innerHTML = renderedContent;
-                                    
-                                    // 实时渲染数学公式
-                                    if (typeof renderMathInElement === 'function') {
-                                        renderMathInElement(messageContainer.querySelector('.message-content'), {
-                                            delimiters: [
-                                                {left: '$$', right: '$$', display: true},
-                                                {left: '$', right: '$', display: false},
-                                                {left: '\\(', right: '\\)', display: false},
-                                                {left: '\\[', right: '\\]', display: true}
-                                            ],
-                                            throwOnError: false
-                                        });
-                                    }
-                                } catch (renderError) {
-                                    console.error('渲染内容时出错:', renderError);
-                                }
-                            }
+							if (eventData.content) {
+							    fullContent += eventData.content;
+
+							    // 检查公式分隔符是否成对出现
+							    const openCount = (fullContent.match(/\\\(/g) || []).length;
+							    const closeCount = (fullContent.match(/\\\)/g) || []).length;
+
+							    if (openCount > 0 && openCount === closeCount) {
+							        try {
+										// 1. 渲染前保护公式
+										let mathExpressions = [];
+										let mathIndex = 0;
+										let contentWithPlaceholders = fullContent.replace(
+										  /\\begin\{[^}]+\}[\s\S]*?\\end\{[^}]+\}|\$\$[\s\S]*?\$\$|\\[[\s\S]*?\\]|\\\([^\)]*?\\\)|\$[^\$]*?\$/g,
+										  (match) => {
+										    mathExpressions.push(match);
+										    return `@@MATH_EXPR_${mathIndex++}@@`;
+										  }
+										);
+										//console.log('带占位符的内容:', contentWithPlaceholders);
+
+										// 2. marked 渲染
+										let htmlContent = marked.parse(contentWithPlaceholders);
+										//console.log('marked 渲染后:', htmlContent);
+
+										// 3. 渲染后还原公式
+										htmlContent = htmlContent.replace(/@@MATH_EXPR_(\d+)@@/g, (_, index) => {
+										    // 直接返回原始公式字符串
+										    return mathExpressions[index];
+										});
+										messageContainer.querySelector('.message-content').innerHTML = htmlContent;
+										console.log('最终 innerHTML:', messageContainer.querySelector('.message-content').innerHTML);
+										
+										if (window.MathJax && window.MathJax.typesetPromise) {
+										    window.MathJax.typesetPromise([messageContainer.querySelector('.message-content')]);
+										}
+							        } catch (renderError) {
+							            console.error('渲染内容时出错:', renderError);
+							        }
+							    }
+							}
                         } catch (e) {
                             console.error('处理数据时出错:', e);
                             if (e instanceof SyntaxError) {
@@ -3225,21 +3255,46 @@ document.addEventListener('DOMContentLoaded', () => {
             // 最终渲染
             console.log('准备渲染最终内容:', fullContent);
             try {
-                const finalRenderedContent = marked.parse(fullContent);
-                messageContainer.querySelector('.message-content').innerHTML = finalRenderedContent;
-                
-                // 最后一次渲染数学公式
-                if (typeof renderMathInElement === 'function') {
-                    renderMathInElement(messageContainer.querySelector('.message-content'), {
-                        delimiters: [
-                            {left: '$$', right: '$$', display: true},
-                            {left: '$', right: '$', display: false},
-                            {left: '\\(', right: '\\)', display: false},
-                            {left: '\\[', right: '\\]', display: true}
-                        ],
-                        throwOnError: false
-                    });
-                }
+				// 1. 保护公式
+				const mathRegex = /(\$\$[\s\S]+?\$\$|\$[^\$]+\$|\\\([^\)]+\\\)|\\\[[^\]]+\\\])/g;
+				let mathMap = [];
+				let protectedContent = fullContent.replace(mathRegex, (match) => {
+				    const key = `%%MATH_PLACEHOLDER_${mathMap.length}%%`;
+				    mathMap.push({ key, value: match });
+				    return key;
+				});
+				console.log('【保护公式后】', protectedContent, mathMap);
+				// 2. marked渲染
+				let finalRenderedContent = marked.parse(protectedContent);
+				console.log('【marked渲染后】', finalRenderedContent);
+
+				// 3. 还原公式
+				mathMap.forEach(({ key, value }) => {
+				    // 替换原始占位符
+				    finalRenderedContent = finalRenderedContent.replace(new RegExp(key, 'g'), value);
+				    // 替换被加粗的占位符
+				    const strongKey = `<strong>${key.replace(/%/g, '')}</strong>`;
+				    finalRenderedContent = finalRenderedContent.replace(new RegExp(strongKey, 'g'), value);
+				});
+				console.log('【还原公式后】', finalRenderedContent);
+				// 4. 插入HTML
+				messageContainer.querySelector('.message-content').innerHTML = finalRenderedContent;
+
+				// 5. 数学公式渲染
+				if (typeof renderMathInElement === 'function') {
+				    renderMathInElement(messageContainer.querySelector('.message-content'), {
+				        delimiters: [
+				            {left: '$$', right: '$$', display: true},
+				            {left: '$', right: '$', display: false},
+				            {left: '\\(', right: '\\)', display: false},
+				            {left: '\\[', right: '\\]', display: false}
+				        ],
+				        throwOnError: false
+				    });
+				}
+				if (window.MathJax && window.MathJax.typesetPromise) {
+				    MathJax.typesetPromise([messageContainer.querySelector('.message-content')]);
+				}
             } catch (renderError) {
                 console.error('最终渲染内容时出错:', renderError);
                 // 如果渲染失败，显示原始内容
@@ -3631,33 +3686,47 @@ document.addEventListener('DOMContentLoaded', () => {
                             }
                             
                             // 累积内容
-                            if (eventData.content) {
-                                fullContent += eventData.content;
-                                try {
-                                    // 实时渲染累积的内容
-                                    const renderedContent = marked.parse(fullContent);
-                                    messageContainer.querySelector('.message-content').innerHTML = renderedContent;
-                                    
-                                    // 实时渲染数学公式
-                                    if (typeof renderMathInElement === 'function') {
-                                        renderMathInElement(messageContainer.querySelector('.message-content'), {
-                                            delimiters: [
-                                                {left: '$$', right: '$$', display: true},
-                                                {left: '$', right: '$', display: false},
-                                                {left: '\\(', right: '\\)', display: false},
-                                                {left: '\\[', right: '\\]', display: true}
-                                            ],
-                                            throwOnError: false
-                                        });
-                                    }
-									// 补充直接调用MathJax.typesetPromise，确保渲染
-									if (window.MathJax && window.MathJax.typesetPromise) {
-									    window.MathJax.typesetPromise([messageContainer.querySelector('.message-content')]);
-									}
-                                } catch (renderError) {
-                                    console.error('渲染内容时出错:', renderError);
-                                }
-                            }
+							if (eventData.content) {
+							    fullContent += eventData.content;
+
+							    // 检查公式分隔符是否成对出现
+							    const openCount = (fullContent.match(/\\\(/g) || []).length;
+							    const closeCount = (fullContent.match(/\\\)/g) || []).length;
+
+							    if (openCount > 0 && openCount === closeCount) {
+							        try {
+										// 1. 渲染前保护公式
+										let mathExpressions = [];
+										let mathIndex = 0;
+										let contentWithPlaceholders = fullContent.replace(
+										  /\\begin\{[^}]+\}[\s\S]*?\\end\{[^}]+\}|\$\$[\s\S]*?\$\$|\\[[\s\S]*?\\]|\\\([^\)]*?\\\)|\$[^\$]*?\$/g,
+										  (match) => {
+										    mathExpressions.push(match);
+										    return `@@MATH_EXPR_${mathIndex++}@@`;
+										  }
+										);
+										//console.log('带占位符的内容:', contentWithPlaceholders);
+
+										// 2. marked 渲染
+										let htmlContent = marked.parse(contentWithPlaceholders);
+										//console.log('marked 渲染后:', htmlContent);
+
+										// 3. 渲染后还原公式
+										htmlContent = htmlContent.replace(/@@MATH_EXPR_(\d+)@@/g, (_, index) => {
+										    // 直接返回原始公式字符串
+										    return mathExpressions[index];
+										});
+										messageContainer.querySelector('.message-content').innerHTML = htmlContent;
+										console.log('最终 innerHTML:', messageContainer.querySelector('.message-content').innerHTML);
+										
+										if (window.MathJax && window.MathJax.typesetPromise) {
+										    window.MathJax.typesetPromise([messageContainer.querySelector('.message-content')]);
+										}
+							        } catch (renderError) {
+							            console.error('渲染内容时出错:', renderError);
+							        }
+							    }
+							}
                         } catch (e) {
                             console.error('处理数据时出错:', e);
                             if (e instanceof SyntaxError) {
@@ -3698,28 +3767,46 @@ document.addEventListener('DOMContentLoaded', () => {
             
             // 最终渲染
             console.log('准备渲染最终内容:', fullContent);
-            try {
-                const finalRenderedContent = marked.parse(fullContent);
-                messageContainer.querySelector('.message-content').innerHTML = finalRenderedContent;
-                
-                // 最后一次渲染数学公式
-                if (typeof renderMathInElement === 'function') {
-                    renderMathInElement(messageContainer.querySelector('.message-content'), {
-                        delimiters: [
-                            {left: '$$', right: '$$', display: true},
-                            {left: '$', right: '$', display: false},
-                            {left: '\\(', right: '\\)', display: false},
-                            {left: '\\[', right: '\\]', display: true}
-                        ],
-                        throwOnError: false
-                    });
-                }
-                
-                updateSessionStatus(SessionStatus.COMPLETED);
-            } catch (renderError) {
-                console.error('最终渲染内容时出错:', renderError);
-                throw renderError;
-            }
+			// 1. 保护公式
+			const mathRegex = /(\$\$[\s\S]+?\$\$|\$[^\$]+\$|\\\([^\)]+\\\)|\\\[[^\]]+\\\])/g;
+			let mathMap = [];
+			let protectedContent = fullContent.replace(mathRegex, (match) => {
+			    const key = `%%MATH_PLACEHOLDER_${mathMap.length}%%`;
+			    mathMap.push({ key, value: match });
+			    return key;
+			});
+			console.log('【保护公式后】', protectedContent, mathMap);
+			// 2. marked渲染
+			let finalRenderedContent = marked.parse(protectedContent);
+			console.log('【marked渲染后】', finalRenderedContent);
+
+			// 3. 还原公式
+			mathMap.forEach(({ key, value }) => {
+			    // 替换原始占位符
+			    finalRenderedContent = finalRenderedContent.replace(new RegExp(key, 'g'), value);
+			    // 替换被加粗的占位符
+			    const strongKey = `<strong>${key.replace(/%/g, '')}</strong>`;
+			    finalRenderedContent = finalRenderedContent.replace(new RegExp(strongKey, 'g'), value);
+			});
+			console.log('【还原公式后】', finalRenderedContent);
+			// 4. 插入HTML
+			messageContainer.querySelector('.message-content').innerHTML = finalRenderedContent;
+
+			// 5. 数学公式渲染
+			if (typeof renderMathInElement === 'function') {
+			    renderMathInElement(messageContainer.querySelector('.message-content'), {
+			        delimiters: [
+			            {left: '$$', right: '$$', display: true},
+			            {left: '$', right: '$', display: false},
+			            {left: '\\(', right: '\\)', display: false},
+			            {left: '\\[', right: '\\]', display: false}
+			        ],
+			        throwOnError: false
+			    });
+			}
+			if (window.MathJax && window.MathJax.typesetPromise) {
+			    MathJax.typesetPromise([messageContainer.querySelector('.message-content')]);
+			}
         } catch (error) {
             console.error('上传高级版作业时出错:', error);
             updateSessionStatus(SessionStatus.ERROR, {
