@@ -1619,23 +1619,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 处理键盘事件
     function handleKeyPress(event) {
-        // 检测 iOS/Safari
-        const isMobileSafari = /iP(ad|hone|od).+Version\/.*Safari/i.test(navigator.userAgent);
-        if (isMobileSafari && event.key === 'Enter') {
-            event.preventDefault();
-            if (event.type === 'keydown') {
-                insertNewline(event.target);
-            }
-            return;
-        }
-        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-        if (isMobile && event.key === 'Enter') {
-            // 阻止表单提交和冒泡
-            event.preventDefault();
-            event.stopPropagation();
-            insertNewline(event.target);
-            return false;
-        }
+		// 检测是否为移动设备
+		const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+
+		if (isMobile && event.key === 'Enter') {
+		    // 移动设备下，Enter 键统一处理为换行
+		    event.preventDefault();  // 阻止默认行为
+		    if (event.type === 'keydown') {  // 确保只在 keydown 时插入换行
+		        insertNewline(event.target);
+		    }
+		    return false;  // 阻止事件冒泡
+		}
         // 桌面端处理：按下Enter键且没有按下Shift键和Alt键，则发送消息
         if (event.key === 'Enter' && !event.shiftKey && !event.altKey) {
             event.preventDefault();
