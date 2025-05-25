@@ -479,50 +479,17 @@ public class HomeworkServiceImpl implements HomeworkService, Serializable {
                                     if (lastSentContent.length() > 0 && messageText.startsWith(lastSentContent.toString())) {
                                         newContent = messageText.substring(lastSentContent.length());
                                     }
-                                    
-                                    // 将新内容按字符分割，但保持特殊字符的完整性
-                                    StringBuilder currentChar = new StringBuilder();
-                                    for (int i = 0; i < newContent.length(); i++) {
-                                        char c = newContent.charAt(i);
-                                        currentChar.append(c);
-                                        
-                                        // 检查是否需要发送当前字符
-                                        boolean shouldSend = false;
-                                        
-                                        // 如果是标点符号或特殊字符，直接发送
-                                        if (isPunctuationOrSpecial(c)) {
-                                            shouldSend = true;
-                                        }
-                                        // 如果是 Markdown 特殊字符，收集完整的标记
-                                        else if (c == '*' || c == '#' || c == '-') {
-                                            while (i + 1 < newContent.length() && newContent.charAt(i + 1) == c) {
-                                                i++;
-                                                currentChar.append(c);
-                                            }
-                                            shouldSend = true;
-                                        }
-                                        // 如果是普通字符，直接发送
-                                        else {
-                                            shouldSend = true;
-                                        }
-                                        
-                                        if (shouldSend && currentChar.length() > 0) {
-                                            // 创建JSON响应
-                                            ObjectMapper mapper = new ObjectMapper();
-                                            ObjectNode responseJson = mapper.createObjectNode();
-                                            responseJson.put("content", currentChar.toString());
-                                            
-                                            // 发送SSE事件
-                                            emitter.send(SseEmitter.event()
-                                                .data(mapper.writeValueAsString(responseJson))
-                                                .id(String.valueOf(System.currentTimeMillis()))
-                                                .name("message"));
-                                            
-                                            // 重置当前字符缓冲区
-                                            currentChar.setLength(0);
-                                        }
+                                    // 只要有新内容就整体发送（不再按字符/标点分割）
+                                    if (!newContent.isEmpty()) {
+                                        ObjectMapper mapper = new ObjectMapper();
+                                        ObjectNode responseJson = mapper.createObjectNode();
+                                        responseJson.put("content", newContent);
+                                        SseEmitter.SseEventBuilder eventBuilder = SseEmitter.event()
+                                            .data(mapper.writeValueAsString(responseJson))
+                                            .id(String.valueOf(System.currentTimeMillis()))
+                                            .name("message");
+                                        emitter.send(eventBuilder);
                                     }
-                                    
                                     // 更新已发送的内容
                                     lastSentContent.setLength(0);
                                     lastSentContent.append(messageText);

@@ -3200,21 +3200,26 @@ document.addEventListener('DOMContentLoaded', () => {
             // 处理剩余的buffer中的数据
             if (buffer.trim()) {
                 const lines = buffer.split('\n');
-                for (const line of lines) {
-                    if (line.startsWith('data:')) {
-                        try {
-                            const data = line.slice(5).trim();
-                            if (data === '[DONE]') continue;
-                            
-                            const eventData = JSON.parse(data);
-                            if (eventData.content) {
-                                fullContent += eventData.content;
-                            }
-                        } catch (e) {
-                            console.error('处理剩余数据时出错:', e);
-                        }
-                    }
-                }
+				for (const line of lines) {
+				    if (line.startsWith('data:')) {
+				        try {
+				            const data = line.slice(5).trim();
+				            if (data === '[DONE]') continue;
+				            const eventData = JSON.parse(data);
+				            if (eventData.content) {
+				                fullContent += eventData.content;
+				                // 实时渲染内容
+				                messageContainer.querySelector('.message-content').innerHTML = marked.parse(fullContent);
+				                // 实时渲染数学公式
+				                if (window.MathJax && window.MathJax.typesetPromise) {
+				                    window.MathJax.typesetPromise([messageContainer.querySelector('.message-content')]);
+				                }
+				            }
+				        } catch (e) {
+				            console.error('处理剩余数据时出错:', e);
+				        }
+				    }
+				}
             }
             
             // 最终渲染
@@ -3645,6 +3650,10 @@ document.addEventListener('DOMContentLoaded', () => {
                                             throwOnError: false
                                         });
                                     }
+									// 补充直接调用MathJax.typesetPromise，确保渲染
+									if (window.MathJax && window.MathJax.typesetPromise) {
+									    window.MathJax.typesetPromise([messageContainer.querySelector('.message-content')]);
+									}
                                 } catch (renderError) {
                                     console.error('渲染内容时出错:', renderError);
                                 }
@@ -3671,6 +3680,14 @@ document.addEventListener('DOMContentLoaded', () => {
                             const eventData = JSON.parse(data);
                             if (eventData.content) {
                                 fullContent += eventData.content;
+								const mathPattern = /\\\\\\([\\s\\S]+?\\\\\\)/g;
+								let mathCount = (fullContent.match(mathPattern) || []).length;
+								if (mathCount > 0) {
+								    messageContainer.querySelector('.message-content').innerHTML = marked.parse(fullContent);
+								    if (window.MathJax && window.MathJax.typesetPromise) {
+								        window.MathJax.typesetPromise([messageContainer.querySelector('.message-content')]);
+								    }
+								}
                             }
                         } catch (e) {
                             console.error('处理剩余数据时出错:', e);
