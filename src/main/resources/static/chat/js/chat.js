@@ -3207,7 +3207,7 @@ document.addEventListener('DOMContentLoaded', () => {
 										    return mathExpressions[index];
 										});
 										messageContainer.querySelector('.message-content').innerHTML = htmlContent;
-										console.log('最终 innerHTML:', messageContainer.querySelector('.message-content').innerHTML);
+										//console.log('最终 innerHTML:', messageContainer.querySelector('.message-content').innerHTML);
 										
 										if (window.MathJax && window.MathJax.typesetPromise) {
 										    window.MathJax.typesetPromise([messageContainer.querySelector('.message-content')]);
@@ -3263,10 +3263,10 @@ document.addEventListener('DOMContentLoaded', () => {
 				    mathMap.push({ key, value: match });
 				    return key;
 				});
-				console.log('【保护公式后】', protectedContent, mathMap);
+				//console.log('【保护公式后】', protectedContent, mathMap);
 				// 2. marked渲染
 				let finalRenderedContent = marked.parse(protectedContent);
-				console.log('【marked渲染后】', finalRenderedContent);
+				//console.log('【marked渲染后】', finalRenderedContent);
 
 				// 3. 还原公式
 				mathMap.forEach(({ key, value }) => {
@@ -3276,7 +3276,7 @@ document.addEventListener('DOMContentLoaded', () => {
 				    const strongKey = `<strong>${key.replace(/%/g, '')}</strong>`;
 				    finalRenderedContent = finalRenderedContent.replace(new RegExp(strongKey, 'g'), value);
 				});
-				console.log('【还原公式后】', finalRenderedContent);
+				//console.log('【还原公式后】', finalRenderedContent);
 				// 4. 插入HTML
 				messageContainer.querySelector('.message-content').innerHTML = finalRenderedContent;
 
@@ -3717,7 +3717,7 @@ document.addEventListener('DOMContentLoaded', () => {
 										    return mathExpressions[index];
 										});
 										messageContainer.querySelector('.message-content').innerHTML = htmlContent;
-										console.log('最终 innerHTML:', messageContainer.querySelector('.message-content').innerHTML);
+										//console.log('最终 innerHTML:', messageContainer.querySelector('.message-content').innerHTML);
 										
 										if (window.MathJax && window.MathJax.typesetPromise) {
 										    window.MathJax.typesetPromise([messageContainer.querySelector('.message-content')]);
@@ -3775,10 +3775,10 @@ document.addEventListener('DOMContentLoaded', () => {
 			    mathMap.push({ key, value: match });
 			    return key;
 			});
-			console.log('【保护公式后】', protectedContent, mathMap);
+			//console.log('【保护公式后】', protectedContent, mathMap);
 			// 2. marked渲染
 			let finalRenderedContent = marked.parse(protectedContent);
-			console.log('【marked渲染后】', finalRenderedContent);
+			//console.log('【marked渲染后】', finalRenderedContent);
 
 			// 3. 还原公式
 			mathMap.forEach(({ key, value }) => {
@@ -3788,7 +3788,7 @@ document.addEventListener('DOMContentLoaded', () => {
 			    const strongKey = `<strong>${key.replace(/%/g, '')}</strong>`;
 			    finalRenderedContent = finalRenderedContent.replace(new RegExp(strongKey, 'g'), value);
 			});
-			console.log('【还原公式后】', finalRenderedContent);
+			//console.log('【还原公式后】', finalRenderedContent);
 			// 4. 插入HTML
 			messageContainer.querySelector('.message-content').innerHTML = finalRenderedContent;
 
