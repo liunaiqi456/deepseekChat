@@ -21,6 +21,12 @@ import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+@Deprecated // 废弃：当前未被主业务流调用，后续如需使用再移除
+/**
+ * 废弃类：DeepSeekServiceImpl
+ * 当前未被主业务流调用，保留以备后续扩展或兼容历史代码。
+ * 如需启用请移除@Deprecated注解。
+ */
 @Service
 public class DeepSeekServiceImpl implements DeepSeekService {
 

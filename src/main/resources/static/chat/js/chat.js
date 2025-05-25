@@ -3770,6 +3770,23 @@ document.addEventListener('DOMContentLoaded', () => {
             setInputState(true);
         }
     }
+
+    // 绑定输入框的 keydown 事件，兼容移动端 Safari 换行
+    if (elements.messageInput) {
+        elements.messageInput.addEventListener('keydown', function(event) {
+            // 检测 iOS/Safari
+            const isMobileSafari = /iP(ad|hone|od).+Version\/.*Safari/i.test(navigator.userAgent);
+            if (isMobileSafari && event.key === 'Enter') {
+                event.preventDefault();
+                event.stopImmediatePropagation();
+                // 插入换行
+                const start = this.selectionStart, end = this.selectionEnd;
+                this.value = this.value.substring(0, start) + '\n' + this.value.substring(end);
+                this.selectionStart = this.selectionEnd = start + 1;
+                this.dispatchEvent(new Event('input'));
+            }
+        });
+    }
 });
 
 // 数学公式渲染函数
