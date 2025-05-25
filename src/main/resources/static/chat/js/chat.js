@@ -1619,6 +1619,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 处理键盘事件
     function handleKeyPress(event) {
+        // 检测 iOS/Safari
+        const isMobileSafari = /iP(ad|hone|od).+Version\/.*Safari/i.test(navigator.userAgent);
+        if (isMobileSafari && event.key === 'Enter') {
+            event.preventDefault();
+            if (event.type === 'keydown') {
+                insertNewline(event.target);
+            }
+            return;
+        }
         const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
         if (isMobile && event.key === 'Enter') {
             // 阻止表单提交和冒泡
@@ -1645,22 +1654,17 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     // 插入换行的辅助函数
-    function insertNewline(input) {
-            const start = input.selectionStart;
-            const end = input.selectionEnd;
-            const value = input.value;
-            const beforeCursor = value.substring(0, start);
-            const afterCursor = value.substring(end);
-            
-        // 插入单个换行符，而不是两个
-        input.value = beforeCursor + '\n' + afterCursor;
-            
-            // 将光标移动到新的位置
-        input.selectionStart = input.selectionEnd = start + 1;
-            
-            // 触发input事件以调整文本框高度
-            input.dispatchEvent(new Event('input'));
-    }
+	function insertNewline(input) {
+	    const start = input.selectionStart;
+	    const end = input.selectionEnd;
+	    const value = input.value;
+	    const beforeCursor = value.substring(0, start);
+	    const afterCursor = value.substring(end);
+	    
+	    input.value = beforeCursor + '\n' + afterCursor;
+	    input.selectionStart = input.selectionEnd = start + 1;
+	    input.dispatchEvent(new Event('input'));
+	}
 
     // 处理消息的显示
 	function updateMessageDisplay(messageElement, content) {
@@ -3771,22 +3775,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // 绑定输入框的 keydown 事件，兼容移动端 Safari 换行
-    if (elements.messageInput) {
-        elements.messageInput.addEventListener('keydown', function(event) {
-            // 检测 iOS/Safari
-            const isMobileSafari = /iP(ad|hone|od).+Version\/.*Safari/i.test(navigator.userAgent);
-            if (isMobileSafari && event.key === 'Enter') {
-                event.preventDefault();
-                event.stopImmediatePropagation();
-                // 插入换行
-                const start = this.selectionStart, end = this.selectionEnd;
-                this.value = this.value.substring(0, start) + '\n' + this.value.substring(end);
-                this.selectionStart = this.selectionEnd = start + 1;
-                this.dispatchEvent(new Event('input'));
-            }
-        });
-    }
 });
 
 // 数学公式渲染函数
