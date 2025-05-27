@@ -34,6 +34,9 @@ public class ChatServiceImpl implements ChatService {
     @Autowired
     private Generation generation;
     
+    @Autowired
+    private HomeworkServiceImpl homeworkServiceImpl;
+    
     // 使用 ConcurrentHashMap 存储会话历史
     private final ConcurrentHashMap<String, List<Message>> sessionHistory = new ConcurrentHashMap<>();
     
@@ -92,21 +95,16 @@ public class ChatServiceImpl implements ChatService {
     
     @Override
     public String chat(String question, List<Message> history) throws NoApiKeyException, InputRequiredException {
+        System.out.println("【调试】ChatServiceImpl.chat方法被调用，参数：" + question);
         int maxRetries = 3;
         int currentRetry = 0;
-        
         while (currentRetry < maxRetries) {
             try {
-                // 添加用户新问题到历史记录
                 Message userMessage = Message.builder()
                         .role(Role.USER.getValue())
                         .content(question)
                         .build();
-                
-                // 创建新的消息列表，包含历史记录和新消息
                 List<Message> messages = new ArrayList<>();
-                
-                // 添加系统消息（如果历史记录为空）
                 if (history.isEmpty()) {
                     Message systemMessage = Message.builder()
                             .role(Role.SYSTEM.getValue())
@@ -115,42 +113,34 @@ public class ChatServiceImpl implements ChatService {
                     messages.add(systemMessage);
                     history.add(systemMessage);
                 }
-                
-                // 添加历史记录
                 messages.addAll(history);
-                // 添加新的用户消息
                 messages.add(userMessage);
-                
-                // 使用统一的参数配置方法
+
+                // 打印即将发送给qwen-plus的完整消息内容
+                System.out.println("=== 发送给qwen-plus的messages ===");
+                for (Message msg : messages) {
+                    System.out.println("role: " + msg.getRole() + ", content: " + msg.getContent());
+                }
+                System.out.println("=== END ===");
+
                 GenerationParam param = createGenerationParam(messages, false);
-                
-                // 调用API
                 GenerationResult result = generation.call(param);
-                
-                // 获取AI回复
                 String response = result.getOutput().getChoices().get(0).getMessage().getContent();
-                
-                // 将用户消息和AI回复添加到历史记录
                 history.add(userMessage);
                 Message assistantMessage = Message.builder()
                         .role(Role.ASSISTANT.getValue())
                         .content(response)
                         .build();
                 history.add(assistantMessage);
-                
                 return response;
-                
             } catch (ApiException e) {
                 currentRetry++;
                 logger.error("API调用失败，尝试第{}次重试，错误: {}", currentRetry, e.getMessage());
-                
                 if (currentRetry >= maxRetries) {
                     logger.error("达到最大重试次数，放弃重试");
                     throw e;
                 }
-                
                 try {
-                    // 指数退避，等待时间随重试次数增加
                     Thread.sleep((long) (Math.pow(2, currentRetry) * 1000));
                 } catch (InterruptedException ie) {
                     Thread.currentThread().interrupt();
@@ -161,7 +151,6 @@ public class ChatServiceImpl implements ChatService {
                 throw e;
             }
         }
-        
         throw new RuntimeException("超过最大重试次数后仍然失败");
     }
     
@@ -178,8 +167,34 @@ public class ChatServiceImpl implements ChatService {
     
     @Override
     public void streamChat(String question, String sessionId, ChatCallback callback) {
+        // 1. 读取 HomeworkServiceImpl 的历史
+        List<HomeworkServiceImpl.ChatHistoryItem> historyItems = homeworkServiceImpl.getSessionHistory(sessionId);
+        List<Message> history = new ArrayList<>();
+        if (historyItems != null && !historyItems.isEmpty()) {
+            for (HomeworkServiceImpl.ChatHistoryItem item : historyItems) {
+                StringBuilder contentBuilder = new StringBuilder();
+                if (item.images != null && !item.images.isEmpty()) {
+                    for (String img : item.images) {
+                        contentBuilder.append("[图片] ").append(img).append("\\n");
+                    }
+                }
+                if (item.text != null) {
+                    contentBuilder.append(item.text);
+                }
+                history.add(Message.builder()
+                    .role(item.role)
+                    .content(contentBuilder.toString())
+                    .build());
+            }
+        }
+        // 2. 调用原有 streamChat(question, history, callback)
+        streamChat(question, history, callback);
+    }
+
+    // 新增支持历史参数的重载
+    public void streamChat(String question, List<Message> history, ChatCallback callback) {
         try {
-            final List<Message> messages = new ArrayList<>(sessionHistory.computeIfAbsent(sessionId, k -> {
+            final List<Message> messages = new ArrayList<>(sessionHistory.computeIfAbsent(question, k -> {
                 List<Message> newHistory = new ArrayList<>();
                 newHistory.add(Message.builder()
                     .role(Role.SYSTEM.getValue())
@@ -187,6 +202,7 @@ public class ChatServiceImpl implements ChatService {
                     .build());
                 return newHistory;
             }));
+            messages.addAll(history);
             Message userMessage = Message.builder()
                     .role(Role.USER.getValue())
                     .content(question)
@@ -212,7 +228,7 @@ public class ChatServiceImpl implements ChatService {
                 error -> {
                     logger.error("流式聊天处理出错", error);
                     callback.onError(error);
-                    streamDisposables.remove(sessionId);
+                    streamDisposables.remove(question);
                 },
                 () -> {
                     Message assistantMessage = Message.builder()
@@ -220,12 +236,12 @@ public class ChatServiceImpl implements ChatService {
                             .content(finalContent.toString())
                             .build();
                     messages.add(assistantMessage);
-                    sessionHistory.put(sessionId, new ArrayList<>(messages));
+                    sessionHistory.put(question, new ArrayList<>(messages));
                     callback.onComplete();
-                    streamDisposables.remove(sessionId);
+                    streamDisposables.remove(question);
                 }
             );
-            streamDisposables.put(sessionId, disposable);
+            streamDisposables.put(question, disposable);
         } catch (Exception e) {
             logger.error("流式聊天处理出错", e);
             callback.onError(e);
@@ -249,5 +265,31 @@ public class ChatServiceImpl implements ChatService {
     @Override
     public List<Message> getHistory(String sessionId) {
         return sessionHistory.getOrDefault(sessionId, new ArrayList<>());
+    }
+
+    // 新增：支持sessionId的多模态历史拼接
+    public String chat(String question, String sessionId) throws NoApiKeyException, InputRequiredException {
+        // 1. 读取 HomeworkServiceImpl 的历史
+        List<HomeworkServiceImpl.ChatHistoryItem> historyItems = homeworkServiceImpl.getSessionHistory(sessionId);
+        List<Message> history = new ArrayList<>();
+        if (historyItems != null && !historyItems.isEmpty()) {
+            for (HomeworkServiceImpl.ChatHistoryItem item : historyItems) {
+                StringBuilder contentBuilder = new StringBuilder();
+                if (item.images != null && !item.images.isEmpty()) {
+                    for (String img : item.images) {
+                        contentBuilder.append("[图片] ").append(img).append("\\n");
+                    }
+                }
+                if (item.text != null) {
+                    contentBuilder.append(item.text);
+                }
+                history.add(Message.builder()
+                    .role(item.role)
+                    .content(contentBuilder.toString())
+                    .build());
+            }
+        }
+        // 2. 调用标准chat
+        return chat(question, history);
     }
 } 

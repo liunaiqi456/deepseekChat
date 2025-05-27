@@ -106,6 +106,16 @@ public class HomeworkServiceImpl implements HomeworkService, Serializable {
         }
     }
     
+    // 统一多轮对话历史，与ChatServiceImpl共享
+    private final ConcurrentHashMap<String, List<ChatHistoryItem>> sessionHistory = new ConcurrentHashMap<>();
+    
+    public static class ChatHistoryItem {
+        public String role; // "user" or "assistant" or "system"
+        public String text; // 文本内容
+        public List<String> images; // 图片路径列表
+        // 可扩展更多字段
+    }
+    
     @Override
     public SseEmitter checkHomework(List<MultipartFile> files, String subject, String sessionId) {
         sessionStatusMap.put(sessionId, SessionStatus.INITIALIZING);
@@ -116,7 +126,6 @@ public class HomeworkServiceImpl implements HomeworkService, Serializable {
             List<String> filePaths = new ArrayList<>();
             for (MultipartFile file : files) {
                 String path = saveHomeworkFile(file, sessionId);
-                // 转换路径分隔符并确保正确的file://格式
                 String normalizedPath = path.replace('\\', '/');
                 if (!normalizedPath.startsWith("/")) {
                     normalizedPath = "/" + normalizedPath;
@@ -124,110 +133,113 @@ public class HomeworkServiceImpl implements HomeworkService, Serializable {
                 filePaths.add("file://" + normalizedPath);
             }
             
-            // 构建系统消息
-            MultiModalMessage systemMessage = MultiModalMessage.builder()
-                    .role(Role.SYSTEM.getValue())
-                    .content(Arrays.asList(Collections.singletonMap("text", 
-                            SUBJECT_PROMPTS.getOrDefault(subject.toLowerCase(), "请仔细检查学生提交的作业并给出详细评价。"))))
-                    .build();
-            
-            // 构建用户消息（包含图片）
-            List<Map<String, Object>> content = new ArrayList<>();
-            for (String path : filePaths) {
-                content.add(Collections.singletonMap("image", path));
+            // 获取/初始化历史
+            List<ChatHistoryItem> history = sessionHistory.computeIfAbsent(sessionId, k -> new ArrayList<>());
+            // systemMessage 只在历史为空时加一次
+            if (history.isEmpty()) {
+                ChatHistoryItem systemMessageItem = new ChatHistoryItem();
+                systemMessageItem.role = Role.SYSTEM.getValue();
+                systemMessageItem.text = SUBJECT_PROMPTS.getOrDefault(subject.toLowerCase(), "请仔细检查学生提交的作业并给出详细评价。");
+                history.add(systemMessageItem);
             }
-            content.add(Collections.singletonMap("text", "请检查这些作业图片并给出详细的评价和建议。"));
+            // 追加新图片消息前，移除历史中所有用户图片消息
+            history.removeIf(item -> Role.USER.getValue().equals(item.role) && item.images != null && !item.images.isEmpty());
             
-            MultiModalMessage userMessage = MultiModalMessage.builder()
-                    .role(Role.USER.getValue())
-                    .content(content)
-                    .build();
+            // 构建用户消息（图片和文本）
+            StringBuilder userContentBuilder = new StringBuilder();
+            for (String path : filePaths) {
+                userContentBuilder.append("[图片] ").append(path).append("\n");
+            }
+            userContentBuilder.append("请检查这些作业图片并给出详细的评价和建议。");
+            ChatHistoryItem userMessageItem = new ChatHistoryItem();
+            userMessageItem.role = Role.USER.getValue();
+            userMessageItem.text = userContentBuilder.toString();
+            userMessageItem.images = new ArrayList<>(filePaths);
+            history.add(userMessageItem);
             
-            // 设置参数
-            MultiModalConversationParam param = MultiModalConversationParam.builder()
-                    .apiKey(apiKey)
-                    .model(MODEL_NAME)
-                    .messages(Arrays.asList(systemMessage, userMessage))
-                    .incrementalOutput(true)
-                    .build();
-            
-            // 创建会话实例
-            MultiModalConversation conversation = new MultiModalConversation();
-            
-            // 流式调用
-            Flowable<MultiModalConversationResult> result = conversation.streamCall(param);
-            
-            // 更新会话状态
-            sessionStatusMap.put(sessionId, SessionStatus.PROCESSING);
-            
-            result.subscribe(
-                    item -> {
-                        try {
-                            // 创建JSON响应
-                            ObjectMapper mapper = new ObjectMapper();
-                            ObjectNode responseJson = mapper.createObjectNode();
-                            
-                            // 添加空值检查
-                            if (item == null || item.getOutput() == null || 
-                                item.getOutput().getChoices() == null || 
-                                item.getOutput().getChoices().isEmpty() ||
-                                item.getOutput().getChoices().get(0).getMessage() == null ||
-                                item.getOutput().getChoices().get(0).getMessage().getContent() == null ||
-                                item.getOutput().getChoices().get(0).getMessage().getContent().isEmpty()) {
-                                logger.warn("收到空的响应数据");
-                                return;
-                            }
-                            
-                            String messageText = item.getOutput().getChoices().get(0).getMessage().getContent().get(0).get("text").toString();
-                            
-                            // 检查消息文本是否为空
-                            if (messageText == null || messageText.trim().isEmpty()) {
-                                logger.warn("收到空的消息文本");
-                                return;
-                            }
-                            
-                            // 直接使用增量内容，只包含content字段
-                            responseJson.put("content", messageText);
-                            String jsonString = mapper.writeValueAsString(responseJson);
-                            
-                            // 使用SseEmitter.SseEventBuilder构建SSE事件
-                            SseEmitter.SseEventBuilder eventBuilder = SseEmitter.event()
-                                .data(jsonString)
-                                .id(String.valueOf(System.currentTimeMillis()))
-                                .name("message");
-                            
-                            // 打印发送的消息内容
-                            System.out.println("=== 发送的SSE消息开始 ===");
-                            System.out.println("使用SseEventBuilder发送: " + jsonString);
-                            System.out.println("=== 发送的SSE消息结束 ===");
-                            
-                            emitter.send(eventBuilder);
-                            
-                        } catch (Exception e) {
-                            sessionStatusMap.put(sessionId, SessionStatus.ERROR);
-                            sessionErrorMap.put(sessionId, e.getMessage());
-                            logger.error("发送消息时出错: {}", e.getMessage(), e);
-                            handleError(emitter, e);
-                        }
-                    },
-                    error -> {
-                        sessionStatusMap.put(sessionId, SessionStatus.ERROR);
-                        sessionErrorMap.put(sessionId, error.getMessage());
-                        logger.error("流处理出错: {}", error.getMessage(), error);
-                        handleError(emitter, error);
-                    },
-                    () -> {
-                        try {
-                            sessionStatusMap.put(sessionId, SessionStatus.COMPLETED);
-                            // 直接完成，不发送[DONE]消息
-                            emitter.complete();
-                        } catch (Exception e) {
-                            sessionStatusMap.put(sessionId, SessionStatus.ERROR);
-                            sessionErrorMap.put(sessionId, e.getMessage());
-                            logger.error("完成时出错: {}", e.getMessage(), e);
-                            handleError(emitter, e);
-                        }
+            // 设置参数，带完整历史
+            List<MultiModalMessage> mmHistory = new ArrayList<>();
+            for (ChatHistoryItem item : history) {
+                List<Map<String, Object>> content = new ArrayList<>();
+                if (item.images != null) {
+                    for (String img : item.images) {
+                        content.add(Collections.singletonMap("image", img));
                     }
+                }
+                if (item.text != null && !item.text.isEmpty()) {
+                    content.add(Collections.singletonMap("text", item.text));
+                }
+                mmHistory.add(MultiModalMessage.builder()
+                    .role(item.role)
+                    .content(content)
+                    .build());
+            }
+            MultiModalConversationParam param = MultiModalConversationParam.builder()
+                .apiKey(apiKey)
+                .model(MODEL_NAME)
+                .messages(mmHistory)
+                .incrementalOutput(true)
+                .build();
+            MultiModalConversation conversation = new MultiModalConversation();
+            Flowable<MultiModalConversationResult> result = conversation.streamCall(param);
+            sessionStatusMap.put(sessionId, SessionStatus.PROCESSING);
+            result.subscribe(
+                item -> {
+                    try {
+                        ObjectMapper mapper = new ObjectMapper();
+                        ObjectNode responseJson = mapper.createObjectNode();
+                        if (item == null || item.getOutput() == null || 
+                            item.getOutput().getChoices() == null || 
+                            item.getOutput().getChoices().isEmpty() ||
+                            item.getOutput().getChoices().get(0).getMessage() == null ||
+                            item.getOutput().getChoices().get(0).getMessage().getContent() == null ||
+                            item.getOutput().getChoices().get(0).getMessage().getContent().isEmpty()) {
+                            logger.warn("收到空的响应数据");
+                            return;
+                        }
+                        String messageText = item.getOutput().getChoices().get(0).getMessage().getContent().get(0).get("text").toString();
+                        if (messageText == null || messageText.trim().isEmpty()) {
+                            logger.warn("收到空的消息文本");
+                            return;
+                        }
+                        responseJson.put("content", messageText);
+                        String jsonString = mapper.writeValueAsString(responseJson);
+                        SseEmitter.SseEventBuilder eventBuilder = SseEmitter.event()
+                            .data(jsonString)
+                            .id(String.valueOf(System.currentTimeMillis()))
+                            .name("message");
+                        emitter.send(eventBuilder);
+                        // AI回复追加到历史
+                        ChatHistoryItem aiItem = new ChatHistoryItem();
+                        aiItem.role = Role.ASSISTANT.getValue();
+                        aiItem.text = messageText;
+                        aiItem.images = null;
+                        history.add(aiItem);
+                        sessionHistory.put(sessionId, new ArrayList<>(history));
+                    } catch (Exception e) {
+                        sessionStatusMap.put(sessionId, SessionStatus.ERROR);
+                        sessionErrorMap.put(sessionId, e.getMessage());
+                        logger.error("发送消息时出错: {}", e.getMessage(), e);
+                        handleError(emitter, e);
+                    }
+                },
+                error -> {
+                    sessionStatusMap.put(sessionId, SessionStatus.ERROR);
+                    sessionErrorMap.put(sessionId, error.getMessage());
+                    logger.error("流处理出错: {}", error.getMessage(), error);
+                    handleError(emitter, error);
+                },
+                () -> {
+                    try {
+                        sessionStatusMap.put(sessionId, SessionStatus.COMPLETED);
+                        emitter.complete();
+                    } catch (Exception e) {
+                        sessionStatusMap.put(sessionId, SessionStatus.ERROR);
+                        sessionErrorMap.put(sessionId, e.getMessage());
+                        logger.error("完成时出错: {}", e.getMessage(), e);
+                        handleError(emitter, e);
+                    }
+                }
             );
             
         } catch (Exception e) {
@@ -591,6 +603,8 @@ public class HomeworkServiceImpl implements HomeworkService, Serializable {
     }
 
     // 添加辅助方法
+    @SuppressWarnings("unused")
+	@Deprecated // 废弃：当前未被主业务流调用，后续如需使用再移除
     private boolean isPunctuationOrSpecial(char c) {
         return c == ',' || c == '.' || c == '!' || c == '?' || c == '\u3002' || c == '\u3001' || 
                c == '\uff01' || c == '\uff1f' || c == '\uff1a' || c == ':' || c == '\u201c' || c == '\u201d' || 
@@ -598,5 +612,10 @@ public class HomeworkServiceImpl implements HomeworkService, Serializable {
                c == '\u3001' || c == '\uff1b' || c == ';' || c == '\u3010' || c == '\u3011' || c == '[' || 
                c == ']' || c == '/' || c == '\\' || c == '|' || c == '_' || c == '`' ||
                c == '\n' || c == '\r' || c == ' ';
+    }
+
+    // 新增：对外暴露历史获取方法，供ChatServiceImpl调用
+    public List<ChatHistoryItem> getSessionHistory(String sessionId) {
+        return sessionHistory.getOrDefault(sessionId, new ArrayList<>());
     }
 } 
