@@ -116,6 +116,9 @@ public class ChatServiceImpl implements ChatService {
                 messages.addAll(history);
                 messages.add(userMessage);
 
+                // 裁剪历史，保证不超tokens
+                trimHistoryToFitTokens(messages, 129024);
+
                 // 打印即将发送给qwen-plus的完整消息内容
                 System.out.println("=== 发送给qwen-plus的messages ===");
                 for (Message msg : messages) {
@@ -208,6 +211,10 @@ public class ChatServiceImpl implements ChatService {
                     .content(question)
                     .build();
             messages.add(userMessage);
+
+            // 裁剪历史，保证不超tokens
+            trimHistoryToFitTokens(messages, 129024);
+
             GenerationParam param = createGenerationParam(messages, true);
             Generation gen = new Generation();
             Flowable<GenerationResult> result = gen.streamCall(param);
@@ -291,5 +298,28 @@ public class ChatServiceImpl implements ChatService {
         }
         // 2. 调用标准chat
         return chat(question, history);
+    }
+
+    // 工具方法：估算消息列表的总tokens
+    private int estimateTotalTokens(List<Message> messages) {
+        int totalChars = 0;
+        for (Message msg : messages) {
+            if (msg.getContent() != null) {
+                totalChars += msg.getContent().length();
+            }
+        }
+        return totalChars / 4; // 简单估算
+    }
+
+    // 工具方法：裁剪历史，保证tokens不超限
+    private void trimHistoryToFitTokens(List<Message> history, int maxTokens) {
+        while (estimateTotalTokens(history) > maxTokens && !history.isEmpty()) {
+            // 移除最前面的历史（通常是最早的user/assistant消息，保留system）
+            if (history.size() > 1 && "system".equals(history.get(0).getRole())) {
+                history.remove(1);
+            } else {
+                history.remove(0);
+            }
+        }
     }
 } 
