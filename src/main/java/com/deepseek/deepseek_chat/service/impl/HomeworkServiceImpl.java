@@ -118,6 +118,7 @@ public class HomeworkServiceImpl implements HomeworkService, Serializable {
     
     @Override
     public SseEmitter checkHomework(List<MultipartFile> files, String subject, String sessionId) {
+        System.out.println("【调试】checkHomework收到图片数量: " + (files == null ? 0 : files.size()));
         sessionStatusMap.put(sessionId, SessionStatus.INITIALIZING);
         SseEmitter emitter = new SseEmitter(180000L); // 3分钟超时
         
@@ -132,7 +133,7 @@ public class HomeworkServiceImpl implements HomeworkService, Serializable {
                 }
                 filePaths.add("file://" + normalizedPath);
             }
-            
+            System.out.println("【调试】checkHomework保存图片路径: " + filePaths);
             // 获取/初始化历史
             List<ChatHistoryItem> history = sessionHistory.computeIfAbsent(sessionId, k -> new ArrayList<>());
             // systemMessage 只在历史为空时加一次
@@ -144,7 +145,6 @@ public class HomeworkServiceImpl implements HomeworkService, Serializable {
             }
             // 追加新图片消息前，移除历史中所有用户图片消息
             history.removeIf(item -> Role.USER.getValue().equals(item.role) && item.images != null && !item.images.isEmpty());
-            
             // 构建用户消息（图片和文本）
             StringBuilder userContentBuilder = new StringBuilder();
             for (String path : filePaths) {
@@ -156,7 +156,16 @@ public class HomeworkServiceImpl implements HomeworkService, Serializable {
             userMessageItem.text = userContentBuilder.toString();
             userMessageItem.images = new ArrayList<>(filePaths);
             history.add(userMessageItem);
-            
+            // 限制历史消息tokens总数（仅对qwen-vl-max生效）
+            int MAX_TOKENS = 30720;
+            while (estimateTotalTokens(history) > MAX_TOKENS && history.size() > 1) {
+                // 保留system，先进先出移除最前面的非system消息
+                if (history.size() > 1 && Role.SYSTEM.getValue().equals(history.get(0).role)) {
+                    history.remove(1);
+                } else {
+                    history.remove(0);
+                }
+            }
             // 设置参数，带完整历史
             List<MultiModalMessage> mmHistory = new ArrayList<>();
             for (ChatHistoryItem item : history) {
@@ -174,6 +183,7 @@ public class HomeworkServiceImpl implements HomeworkService, Serializable {
                     .content(content)
                     .build());
             }
+            System.out.println("【调试】checkHomework调用下游MultiModalConversation.streamCall，历史消息条数: " + mmHistory.size());
             MultiModalConversationParam param = MultiModalConversationParam.builder()
                 .apiKey(apiKey)
                 .model(MODEL_NAME)
@@ -617,5 +627,21 @@ public class HomeworkServiceImpl implements HomeworkService, Serializable {
     // 新增：对外暴露历史获取方法，供ChatServiceImpl调用
     public List<ChatHistoryItem> getSessionHistory(String sessionId) {
         return sessionHistory.getOrDefault(sessionId, new ArrayList<>());
+    }
+
+    // 工具方法：估算历史消息的总tokens（字符数/4）
+    private int estimateTotalTokens(List<ChatHistoryItem> history) {
+        int totalChars = 0;
+        for (ChatHistoryItem item : history) {
+            if (item.text != null) {
+                totalChars += item.text.length();
+            }
+            if (item.images != null) {
+                for (String img : item.images) {
+                    totalChars += img.length();
+                }
+            }
+        }
+        return totalChars / 4;
     }
 } 

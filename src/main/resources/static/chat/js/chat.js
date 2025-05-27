@@ -3077,17 +3077,13 @@ document.addEventListener('DOMContentLoaded', () => {
     async function uploadHomework(files, subject) {
         try {
             console.log('开始上传作业 - 文件数量:', files.length, '科目:', subject);
-            
             if (!files || !Array.isArray(files) || files.length === 0) {
                 throw new Error('请选择要批改的作业文件');
             }
-            
             if (!subject || subject.trim() === '') {
                 throw new Error('请选择作业科目');
             }
-            
             showSystemMessage('正在上传作业...', 'info');
-            
             const formData = new FormData();
             files.forEach(file => {
                 formData.append('files', file);
@@ -3095,14 +3091,11 @@ document.addEventListener('DOMContentLoaded', () => {
             });
             formData.append('subject', subject);
             formData.append('sessionId', sessionId);
-            
             console.log('准备发送请求 - 科目:', subject, '会话ID:', sessionId);
-            
             // 创建消息容器
             const messageContainer = createMessageElement('assistant', '');
             elements.chatMessages.appendChild(messageContainer);
             messageContainer.querySelector('.message-content').innerHTML = '<div class="typing-indicator">正在批改作业...</div>';
-            
             // 发送请求，添加完整的请求头
             const response = await fetch('/homework/check', {
                 method: 'POST',
@@ -3112,12 +3105,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 },
                 body: formData
             });
-            
             if (!response.ok) {
                 const errorText = await response.text();
                 console.error('服务器响应错误:', response.status, errorText);
-                
-                // 根据不同的错误状态码提供更友好的错误信息
                 if (response.status === 406) {
                     throw new Error('服务器无法处理上传的文件格式，请确保上传的是图片文件');
                 } else if (response.status === 413) {
@@ -3128,95 +3118,87 @@ document.addEventListener('DOMContentLoaded', () => {
                     throw new Error(`上传失败: ${errorText}`);
                 }
             }
-            
-            // 检查响应类型
             const contentType = response.headers.get('content-type');
             if (!contentType || (!contentType.includes('text/event-stream') && !contentType.includes('application/json'))) {
                 throw new Error('服务器返回了不支持的响应格式');
             }
-            
             console.log('开始处理服务器响应');
-            
             const reader = response.body.getReader();
             const decoder = new TextDecoder();
             let buffer = '';
-            let fullContent = ''; // 用于累积完整的内容
-            
+            let fullContent = '';
+            let lastRenderedContent = '';
+            let renderTimer = null;
+            let isMultiImage = files.length > 1;
+            let done = false;
+            // 工具函数：判断内容末尾是否为公式分隔符
+            function endsWithMathDelimiter(str) {
+                return /\\\)$|\\\]$|\$$|\$\$$/.test(str.trim());
+            }
+            // 渲染函数
+            function tryRender() {
+                if (fullContent && fullContent !== lastRenderedContent) {
+                    try {
+                        let mathExpressions = [];
+                        let mathIndex = 0;
+                        let contentWithPlaceholders = fullContent.replace(
+                          /\\begin\{[^}]+\}[\s\S]*?\\end\{[^}]+\}|\$\$[\s\S]*?\$\$|\\\[[\s\S]*?\\\]|\\\([^)]+\\\)|\$[^$]*?\$/g,
+                          (match) => {
+                            mathExpressions.push(match);
+                            return `@@MATH_EXPR_${mathIndex++}@@`;
+                          }
+                        );
+                        let htmlContent = marked.parse(contentWithPlaceholders);
+                        htmlContent = htmlContent.replace(/@@MATH_EXPR_(\d+)@@/g, (_, index) => mathExpressions[index]);
+                        messageContainer.querySelector('.message-content').innerHTML = htmlContent;
+                        if (window.MathJax && window.MathJax.typesetPromise) {
+                            window.MathJax.typesetPromise([messageContainer.querySelector('.message-content')]);
+                        }
+                        lastRenderedContent = fullContent;
+                    } catch (renderError) {
+                        console.error('渲染内容时出错:', renderError);
+                    }
+                }
+            }
             while (true) {
-                const {value, done} = await reader.read();
-                if (done) {
+                const {value, done: streamDone} = await reader.read();
+                if (streamDone) {
                     console.log('响应流读取完成');
                     break;
                 }
-                
                 buffer += decoder.decode(value, {stream: true});
                 const lines = buffer.split('\n');
                 buffer = lines.pop() || '';
-                
                 for (const line of lines) {
                     if (!line.trim()) continue;
-                    
-                    // 处理事件流格式
                     if (line.startsWith('data:')) {
                         try {
                             const data = line.slice(5).trim();
-                            
-                            // 检查是否是结束标记
                             if (data === '[DONE]') {
                                 console.log('收到[DONE]标记');
                                 continue;
                             }
-                            
-                            // 解析JSON数据
                             const eventData = JSON.parse(data);
-                            
                             if (eventData.error) {
                                 updateSessionStatus(SessionStatus.ERROR, eventData);
                                 break;
                             }
-                            
-                            // 累积内容
-							if (eventData.content) {
-							    fullContent += eventData.content;
-
-							    // 检查公式分隔符是否成对出现
-							    const openCount = (fullContent.match(/\\\(/g) || []).length;
-							    const closeCount = (fullContent.match(/\\\)/g) || []).length;
-
-							    if (openCount > 0 && openCount === closeCount) {
-							        try {
-										// 1. 渲染前保护公式
-										let mathExpressions = [];
-										let mathIndex = 0;
-										let contentWithPlaceholders = fullContent.replace(
-										  /\\begin\{[^}]+\}[\s\S]*?\\end\{[^}]+\}|\$\$[\s\S]*?\$\$|\\[[\s\S]*?\\]|\\\([^\)]*?\\\)|\$[^\$]*?\$/g,
-										  (match) => {
-										    mathExpressions.push(match);
-										    return `@@MATH_EXPR_${mathIndex++}@@`;
-										  }
-										);
-										//console.log('带占位符的内容:', contentWithPlaceholders);
-
-										// 2. marked 渲染
-										let htmlContent = marked.parse(contentWithPlaceholders);
-										//console.log('marked 渲染后:', htmlContent);
-
-										// 3. 渲染后还原公式
-										htmlContent = htmlContent.replace(/@@MATH_EXPR_(\d+)@@/g, (_, index) => {
-										    // 直接返回原始公式字符串
-										    return mathExpressions[index];
-										});
-										messageContainer.querySelector('.message-content').innerHTML = htmlContent;
-										//console.log('最终 innerHTML:', messageContainer.querySelector('.message-content').innerHTML);
-										
-										if (window.MathJax && window.MathJax.typesetPromise) {
-										    window.MathJax.typesetPromise([messageContainer.querySelector('.message-content')]);
-										}
-							        } catch (renderError) {
-							            console.error('渲染内容时出错:', renderError);
-							        }
-							    }
-							}
+                            if (eventData.content) {
+                                fullContent += eventData.content;
+                                if (!isMultiImage) {
+                                    // 单图：原有流式渲染逻辑
+                                    const openCount = (fullContent.match(/\\\(/g) || []).length;
+                                    const closeCount = (fullContent.match(/\\\)/g) || []).length;
+                                    if (openCount > 0 && openCount === closeCount) {
+                                        tryRender();
+                                    }
+                                } else {
+                                    // 多图：内容长度变化且末尾不是公式分隔符时才渲染
+                                    if (fullContent.length !== lastRenderedContent.length && !endsWithMathDelimiter(fullContent)) {
+                                        tryRender();
+                                    }
+                                }
+                            }
                         } catch (e) {
                             console.error('处理数据时出错:', e);
                             if (e instanceof SyntaxError) {
@@ -3226,84 +3208,16 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 }
             }
-            
-            // 处理剩余的buffer中的数据
-            if (buffer.trim()) {
-                const lines = buffer.split('\n');
-				for (const line of lines) {
-				    if (line.startsWith('data:')) {
-				        try {
-				            const data = line.slice(5).trim();
-				            if (data === '[DONE]') continue;
-				            const eventData = JSON.parse(data);
-				            if (eventData.content) {
-				                fullContent += eventData.content;
-				                // 实时渲染内容
-				                messageContainer.querySelector('.message-content').innerHTML = marked.parse(fullContent);
-				                // 实时渲染数学公式
-				                if (window.MathJax && window.MathJax.typesetPromise) {
-				                    window.MathJax.typesetPromise([messageContainer.querySelector('.message-content')]);
-				                }
-				            }
-				        } catch (e) {
-				            console.error('处理剩余数据时出错:', e);
-				        }
-				    }
-				}
+            done = true;
+            if (renderTimer) {
+                clearInterval(renderTimer);
+                renderTimer = null;
             }
-            
             // 最终渲染
             console.log('准备渲染最终内容:', fullContent);
-            try {
-				// 1. 保护公式
-				const mathRegex = /(\$\$[\s\S]+?\$\$|\$[^\$]+\$|\\\([^\)]+\\\)|\\\[[^\]]+\\\])/g;
-				let mathMap = [];
-				let protectedContent = fullContent.replace(mathRegex, (match) => {
-				    const key = `%%MATH_PLACEHOLDER_${mathMap.length}%%`;
-				    mathMap.push({ key, value: match });
-				    return key;
-				});
-				//console.log('【保护公式后】', protectedContent, mathMap);
-				// 2. marked渲染
-				let finalRenderedContent = marked.parse(protectedContent);
-				//console.log('【marked渲染后】', finalRenderedContent);
-
-				// 3. 还原公式
-				mathMap.forEach(({ key, value }) => {
-				    // 替换原始占位符
-				    finalRenderedContent = finalRenderedContent.replace(new RegExp(key, 'g'), value);
-				    // 替换被加粗的占位符
-				    const strongKey = `<strong>${key.replace(/%/g, '')}</strong>`;
-				    finalRenderedContent = finalRenderedContent.replace(new RegExp(strongKey, 'g'), value);
-				});
-				//console.log('【还原公式后】', finalRenderedContent);
-				// 4. 插入HTML
-				messageContainer.querySelector('.message-content').innerHTML = finalRenderedContent;
-
-				// 5. 数学公式渲染
-				if (typeof renderMathInElement === 'function') {
-				    renderMathInElement(messageContainer.querySelector('.message-content'), {
-				        delimiters: [
-				            {left: '$$', right: '$$', display: true},
-				            {left: '$', right: '$', display: false},
-				            {left: '\\(', right: '\\)', display: false},
-				            {left: '\\[', right: '\\]', display: false}
-				        ],
-				        throwOnError: false
-				    });
-				}
-				if (window.MathJax && window.MathJax.typesetPromise) {
-				    MathJax.typesetPromise([messageContainer.querySelector('.message-content')]);
-				}
-            } catch (renderError) {
-                console.error('最终渲染内容时出错:', renderError);
-                // 如果渲染失败，显示原始内容
-                messageContainer.querySelector('.message-content').textContent = fullContent;
-            }
-            
+            tryRender();
             // 滚动到底部
             scrollToBottom();
-            
             updateSessionStatus(SessionStatus.COMPLETED);
         } catch (error) {
             console.error('作业批改失败:', error);
@@ -3312,7 +3226,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 errorType: 'UPLOAD_ERROR',
                 errorDescription: '上传作业时发生错误'
             });
-            showSystemMessage(error.message, 'error');
+            showSystemMessage('文件上传失败：' + error.message, 'error');
         }
     }
 
