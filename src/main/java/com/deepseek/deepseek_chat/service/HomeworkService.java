@@ -3,6 +3,7 @@ package com.deepseek.deepseek_chat.service;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import com.deepseek.deepseek_chat.model.SessionStatus;
+import org.springframework.lang.NonNull;
 
 import java.util.List;
 
@@ -12,9 +13,10 @@ public interface HomeworkService {
      * @param files 作业图片文件列表
      * @param subject 科目
      * @param sessionId 会话ID
+     * @param customPrompt 自定义提示
      * @return SSE发射器用于流式输出
      */
-    SseEmitter checkHomework(List<MultipartFile> files, String subject, String sessionId);
+    SseEmitter checkHomework(@NonNull List<MultipartFile> files, String subject, String sessionId, String customPrompt);
     
     /**
      * 保存作业文件（基础版）

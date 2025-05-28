@@ -2979,18 +2979,14 @@ document.addEventListener('DOMContentLoaded', () => {
     // 处理作业上传
     async function handleHomeworkUpload(files) {
         try {
-            // 添加防御性检查
             if (!files || typeof files !== 'object') {
                 console.error('文件对象无效:', files);
                 showSystemMessage('文件上传失败：无效的文件对象', 'error');
                 return;
             }
-
             updateSessionStatus(SessionStatus.INITIALIZING);
             console.log('开始处理作业上传，文件列表:', files);
-            // 使用Array.from之前进行类型检查
             const filesList = files.length !== undefined ? Array.from(files) : [];
-            console.log('转换后的文件列表:', filesList);
             if (filesList.length === 0) {
                 showSystemMessage('请选择作业文件', 'error');
                 return;
@@ -2999,69 +2995,102 @@ document.addEventListener('DOMContentLoaded', () => {
                 showSystemMessage('一次最多只能上传5张图片', 'error');
                 return;
             }
-            // 检查每个文件对象的有效性
             for (let file of filesList) {
                 if (!file || typeof file !== 'object') {
                     console.error('无效的文件对象:', file);
                     showSystemMessage('文件上传失败：文件格式错误', 'error');
                     return;
                 }
-                console.log('检查文件:', file.name, '类型:', file.type, '大小:', file.size);
                 if (!file.type || !file.type.startsWith('image/')) {
                     showSystemMessage('只能上传图片文件', 'error');
                     return;
                 }
-                if (!file.size || file.size > 10 * 1024 * 1024) { // 10MB
+                if (!file.size || file.size > 10 * 1024 * 1024) {
                     showSystemMessage('图片大小不能超过10MB', 'error');
                     return;
                 }
             }
-			// 优化：上传后立即在消息区显示图片预览（以用户身份）
-			const imagePromises = filesList.map(file => {
-			    return new Promise(resolve => {
-			        const reader = new FileReader();
-			        reader.onload = function(e) {
-			            resolve(`<img src="${e.target.result}" alt="${file.name}" style="max-width: 200px; max-height: 200px; border-radius: 8px; margin: 4px 8px 4px 0;">`);
-			        };
-			        reader.readAsDataURL(file);
-			    });
-			});
-			Promise.all(imagePromises).then(imgTags => {
-			    const messageDiv = createMessageElement('user', '');
-			    const contentDiv = messageDiv.querySelector('.message-content');
-			    contentDiv.innerHTML = imgTags.join('');
-			    elements.chatMessages.appendChild(messageDiv);
-			    scrollToBottom();
-			});
-            // 文件验证通过，显示科目选择对话框
-            console.log('文件验证通过，显示科目选择对话框');
+            // 图片预览
+            const imagePromises = filesList.map(file => {
+                return new Promise(resolve => {
+                    const reader = new FileReader();
+                    reader.onload = function(e) {
+                        resolve(`<img src="${e.target.result}" alt="${file.name}" style="max-width: 200px; max-height: 200px; border-radius: 8px; margin: 4px 8px 4px 0;">`);
+                    };
+                    reader.readAsDataURL(file);
+                });
+            });
+            Promise.all(imagePromises).then(imgTags => {
+                const messageDiv = createMessageElement('user', '');
+                const contentDiv = messageDiv.querySelector('.message-content');
+                contentDiv.innerHTML = imgTags.join('');
+                elements.chatMessages.appendChild(messageDiv);
+                scrollToBottom();
+            });
+            // 弹窗
             const subjectDialog = document.createElement('div');
             subjectDialog.className = 'subject-dialog';
             subjectDialog.innerHTML = `
-                <div class="subject-dialog-content">
-                    <h3>请选择作业科目</h3>
-                    <div class="subject-options">
-                        <button data-subject="chinese">语文</button>
-                        <button data-subject="math">数学</button>
-                        <button data-subject="english">英语</button>
-                    </div>
+            <div class="subject-dialog-content">
+                <h3>请选择作业科目</h3>
+                <div class="subject-options">
+                    <button data-subject="chinese">语文</button>
+                    <button data-subject="math">数学</button>
+                    <button data-subject="english">英语</button>
                 </div>
+                <div style="margin-top: 16px;">
+                    <label>
+                        <input type="checkbox" id="customPromptCheck"> 自定义提示词
+                    </label>
+                    <textarea id="customPromptArea" style="display:none;width:100%;margin-top:8px;" placeholder="请输入自定义提示词"></textarea>
+                </div>
+                <div style="margin-top: 16px; text-align: right; display:none;" id="customPromptBtns">
+                    <button id="subjectConfirmBtn" style="margin-right: 8px;">确定</button>
+                    <button id="subjectCancelBtn">取消</button>
+                </div>
+            </div>
             `;
-            document.body.appendChild(subjectDialog);
-            // 处理科目选择
-            subjectDialog.querySelectorAll('button').forEach(button => {
+            const customPromptCheck = subjectDialog.querySelector('#customPromptCheck');
+            const customPromptArea = subjectDialog.querySelector('#customPromptArea');
+            const confirmBtn = subjectDialog.querySelector('#subjectConfirmBtn');
+            const cancelBtn = subjectDialog.querySelector('#subjectCancelBtn');
+            const customPromptBtns = subjectDialog.querySelector('#customPromptBtns');
+            const subjectBtns = subjectDialog.querySelectorAll('.subject-options button');
+            // 默认：科目按钮可用，确定/取消按钮隐藏
+            customPromptCheck.addEventListener('change', function() {
+                if (this.checked) {
+                    customPromptArea.style.display = 'block';
+                    customPromptBtns.style.display = 'block';
+                    subjectBtns.forEach(btn => btn.disabled = true);
+                } else {
+                    customPromptArea.style.display = 'none';
+                    customPromptBtns.style.display = 'none';
+                    subjectBtns.forEach(btn => btn.disabled = false);
+                }
+            });
+            // 科目按钮：点击后立即上传
+            subjectBtns.forEach(button => {
                 button.addEventListener('click', async () => {
-                    try {
-                        const subject = button.dataset.subject;
-                        console.log('选择科目:', subject, '文件数量:', filesList.length);
-                        document.body.removeChild(subjectDialog);
-                        await uploadHomework(filesList, subject);
-                    } catch (error) {
-                        console.error('处理科目选择时出错:', error);
-                        showSystemMessage(`处理失败: ${error.message}`, 'error');
-                    }
+                    const subject = button.dataset.subject;
+                    document.body.removeChild(subjectDialog);
+                    await uploadHomework(filesList, subject, '');
                 });
             });
+            // 确定按钮：上传自定义
+            confirmBtn.addEventListener('click', async () => {
+                const customPrompt = customPromptArea.value.trim();
+                if (!customPrompt) {
+                    showSystemMessage('请输入自定义提示词', 'error');
+                    return;
+                }
+                document.body.removeChild(subjectDialog);
+                await uploadHomework(filesList, 'customs', customPrompt);
+            });
+            // 取消按钮
+            cancelBtn.addEventListener('click', () => {
+                document.body.removeChild(subjectDialog);
+            });
+            document.body.appendChild(subjectDialog);
         } catch (error) {
             console.error('处理作业上传时出错:', error);
             updateSessionStatus(SessionStatus.ERROR, {
@@ -3074,7 +3103,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // 上传作业并获取批改结果
-    async function uploadHomework(files, subject) {
+    async function uploadHomework(files, subject, customPrompt) {
         try {
             console.log('开始上传作业 - 文件数量:', files.length, '科目:', subject);
             if (!files || !Array.isArray(files) || files.length === 0) {
@@ -3091,6 +3120,9 @@ document.addEventListener('DOMContentLoaded', () => {
             });
             formData.append('subject', subject);
             formData.append('sessionId', sessionId);
+			if (customPrompt && customPrompt.trim() !== '') {
+			    formData.append('customPrompt', customPrompt);
+			}
             console.log('准备发送请求 - 科目:', subject, '会话ID:', sessionId);
             // 创建消息容器
             const messageContainer = createMessageElement('assistant', '');

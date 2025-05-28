@@ -124,12 +124,16 @@ public class HomeworkServiceImpl implements HomeworkService, Serializable {
     }
     
     @Override
-    public SseEmitter checkHomework(@NonNull List<MultipartFile> files, String subject, String sessionId) {
-        System.out.println("【调试】checkHomework收到图片数量: " + (files == null ? 0 : files.size()));
+    public SseEmitter checkHomework(@NonNull List<MultipartFile> files, String subject, String sessionId, String customPrompt) {
+        //System.out.println("【调试】checkHomework收到图片数量: " + (files == null ? 0 : files.size()));
         sessionStatusMap.put(sessionId, SessionStatus.INITIALIZING);
         SseEmitter emitter = new SseEmitter(180000L); // 3分钟超时
         
         try {
+            // 自定义上传时强制重置system prompt
+            if ("customs".equalsIgnoreCase(subject) && customPrompt != null && !customPrompt.trim().isEmpty()) {
+                sessionHistory.remove(sessionId);
+            }
             // 保存文件并获取文件路径
             List<String> filePaths = new ArrayList<>();
             for (MultipartFile file : files) {
@@ -140,14 +144,19 @@ public class HomeworkServiceImpl implements HomeworkService, Serializable {
                 }
                 filePaths.add("file://" + normalizedPath);
             }
-            System.out.println("【调试】checkHomework保存图片路径: " + filePaths);
+            //System.out.println("【调试】checkHomework保存图片路径: " + filePaths);
             // 获取/初始化历史
             List<ChatHistoryItem> history = sessionHistory.computeIfAbsent(sessionId, k -> new ArrayList<>());
             // systemMessage 只在历史为空时加一次
             if (history.isEmpty()) {
                 ChatHistoryItem systemMessageItem = new ChatHistoryItem();
                 systemMessageItem.role = Role.SYSTEM.getValue();
-                systemMessageItem.text = SUBJECT_PROMPTS.getOrDefault(subject.toLowerCase(), "请仔细检查学生提交的作业并给出详细评价。");
+                if ("customs".equalsIgnoreCase(subject) && customPrompt != null && !customPrompt.trim().isEmpty()) {
+                    systemMessageItem.text = customPrompt;
+                } else {
+                    systemMessageItem.text = SUBJECT_PROMPTS.getOrDefault(subject.toLowerCase(), "请仔细检查学生提交的作业并给出详细评价。");
+                }
+                //System.out.println("【调试】subject=" + subject + ", system prompt=" + systemMessageItem.text);
                 history.add(systemMessageItem);
             }
             // 追加新图片消息前，移除历史中所有用户图片消息
@@ -157,7 +166,10 @@ public class HomeworkServiceImpl implements HomeworkService, Serializable {
             for (String path : filePaths) {
                 userContentBuilder.append("[图片] ").append(path).append("\n");
             }
-            userContentBuilder.append("请检查这些作业图片并给出详细的评价和建议。");
+            // 仅在非自定义提示词时拼接默认说明
+            if (!("customs".equalsIgnoreCase(subject) && customPrompt != null && !customPrompt.trim().isEmpty())) {
+                userContentBuilder.append("请检查这些作业图片并给出详细的评价和建议。");
+            }
             ChatHistoryItem userMessageItem = new ChatHistoryItem();
             userMessageItem.role = Role.USER.getValue();
             userMessageItem.text = userContentBuilder.toString();
@@ -190,7 +202,11 @@ public class HomeworkServiceImpl implements HomeworkService, Serializable {
                     .content(content)
                     .build());
             }
-            System.out.println("【调试】checkHomework调用下游MultiModalConversation.streamCall，历史消息条数: " + mmHistory.size());
+            // 调试：打印完整prompt
+            //System.out.println("【调试】即将发送给百炼的完整prompt（mmHistory/messages参数）：");
+            for (int i = 0; i < mmHistory.size(); i++) {
+            //    System.out.println("[" + i + "] role: " + mmHistory.get(i).getRole() + ", content: " + mmHistory.get(i).getContent());
+            }
             MultiModalConversationParam param = MultiModalConversationParam.builder()
                 .apiKey(apiKey)
                 .model(MODEL_NAME)

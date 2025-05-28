@@ -30,6 +30,7 @@ public class HomeworkController {
             @RequestParam("files") List<MultipartFile> files,
             @RequestParam("subject") String subject,
             @RequestParam("sessionId") String sessionId,
+            @RequestParam(value = "customPrompt", required = false) String customPrompt,
             HttpServletRequest request) {
         
         // 记录请求信息
@@ -75,7 +76,7 @@ public class HomeworkController {
             
             logger.info("设备类型: {}", isMobile ? "移动设备" : "桌面设备");
             
-            SseEmitter emitter = homeworkService.checkHomework(files, subject, sessionId);
+            SseEmitter emitter = homeworkService.checkHomework(files, subject, sessionId, customPrompt);
             
             // 设置响应头
             HttpHeaders headers = new HttpHeaders();
@@ -181,11 +182,14 @@ public class HomeworkController {
      * 普通作业批改接口
      */
     @PostMapping("/check")
-    public SseEmitter checkHomework(@RequestParam("files") List<MultipartFile> files,
-                                  @RequestParam("subject") String subject,
-                                  @RequestParam("sessionId") String sessionId) {
+    public SseEmitter checkHomework(
+        @RequestParam("files") List<MultipartFile> files,
+        @RequestParam("subject") String subject,
+        @RequestParam("sessionId") String sessionId,
+        @RequestParam(value = "customPrompt", required = false) String customPrompt
+    ) {
         logger.info("收到作业批改请求 - 文件数量: {}, 科目: {}, 会话ID: {}", files.size(), subject, sessionId);
-        return homeworkService.checkHomework(files, subject, sessionId);
+        return homeworkService.checkHomework(files, subject, sessionId, customPrompt);
     }
 
     /**
