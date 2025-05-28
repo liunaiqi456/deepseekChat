@@ -16,9 +16,12 @@ import org.apache.commons.codec.digest.DigestUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Lazy;
+import org.springframework.lang.NonNull;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -109,6 +112,10 @@ public class HomeworkServiceImpl implements HomeworkService, Serializable {
     // 统一多轮对话历史，与ChatServiceImpl共享
     private final ConcurrentHashMap<String, List<ChatHistoryItem>> sessionHistory = new ConcurrentHashMap<>();
     
+    @Autowired
+    @Lazy
+    private ChatServiceImpl chatServiceImpl;
+    
     public static class ChatHistoryItem {
         public String role; // "user" or "assistant" or "system"
         public String text; // 文本内容
@@ -117,7 +124,7 @@ public class HomeworkServiceImpl implements HomeworkService, Serializable {
     }
     
     @Override
-    public SseEmitter checkHomework(List<MultipartFile> files, String subject, String sessionId) {
+    public SseEmitter checkHomework(@NonNull List<MultipartFile> files, String subject, String sessionId) {
         System.out.println("【调试】checkHomework收到图片数量: " + (files == null ? 0 : files.size()));
         sessionStatusMap.put(sessionId, SessionStatus.INITIALIZING);
         SseEmitter emitter = new SseEmitter(180000L); // 3分钟超时
@@ -226,6 +233,10 @@ public class HomeworkServiceImpl implements HomeworkService, Serializable {
                         aiItem.images = null;
                         history.add(aiItem);
                         sessionHistory.put(sessionId, new ArrayList<>(history));
+                        // 同步AI回复到plus模型历史
+                        if (chatServiceImpl != null && messageText != null && !messageText.trim().isEmpty()) {
+                            chatServiceImpl.appendToPlusHistory(sessionId, messageText);
+                        }
                     } catch (Exception e) {
                         sessionStatusMap.put(sessionId, SessionStatus.ERROR);
                         sessionErrorMap.put(sessionId, e.getMessage());

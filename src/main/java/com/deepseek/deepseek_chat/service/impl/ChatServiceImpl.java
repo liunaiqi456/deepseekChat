@@ -190,14 +190,9 @@ public class ChatServiceImpl implements ChatService {
                     .build());
             }
         }
-        // 2. 调用原有 streamChat(question, history, callback)
-        streamChat(question, history, callback);
-    }
-
-    // 新增支持历史参数的重载
-    public void streamChat(String question, List<Message> history, ChatCallback callback) {
+        // 2. session 相关操作
         try {
-            final List<Message> messages = new ArrayList<>(sessionHistory.computeIfAbsent(question, k -> {
+            final List<Message> messages = new ArrayList<>(sessionHistory.computeIfAbsent(sessionId, k -> {
                 List<Message> newHistory = new ArrayList<>();
                 newHistory.add(Message.builder()
                     .role(Role.SYSTEM.getValue())
@@ -235,7 +230,7 @@ public class ChatServiceImpl implements ChatService {
                 error -> {
                     logger.error("流式聊天处理出错", error);
                     callback.onError(error);
-                    streamDisposables.remove(question);
+                    streamDisposables.remove(sessionId);
                 },
                 () -> {
                     Message assistantMessage = Message.builder()
@@ -243,12 +238,12 @@ public class ChatServiceImpl implements ChatService {
                             .content(finalContent.toString())
                             .build();
                     messages.add(assistantMessage);
-                    sessionHistory.put(question, new ArrayList<>(messages));
+                    sessionHistory.put(sessionId, new ArrayList<>(messages));
                     callback.onComplete();
-                    streamDisposables.remove(question);
+                    streamDisposables.remove(sessionId);
                 }
             );
-            streamDisposables.put(question, disposable);
+            streamDisposables.put(sessionId, disposable);
         } catch (Exception e) {
             logger.error("流式聊天处理出错", e);
             callback.onError(e);
@@ -321,5 +316,14 @@ public class ChatServiceImpl implements ChatService {
                 history.remove(0);
             }
         }
+    }
+
+    // 新增：将AI回复同步追加到plus主模型历史
+    public void appendToPlusHistory(String sessionId, String aiReply) {
+        List<Message> plusHistory = sessionHistory.computeIfAbsent(sessionId, k -> createNewHistory());
+        plusHistory.add(Message.builder()
+            .role(Role.ASSISTANT.getValue())
+            .content(aiReply)
+            .build());
     }
 } 
