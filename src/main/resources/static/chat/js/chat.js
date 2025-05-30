@@ -1619,17 +1619,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 处理键盘事件
     function handleKeyPress(event) {
-		// 检测是否为移动设备
-		const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-
+        // 检测是否为移动设备
+        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+        
 		if (isMobile && event.key === 'Enter') {
 		    // 移动设备下，Enter 键统一处理为换行
 		    event.preventDefault();  // 阻止默认行为
 		    if (event.type === 'keydown') {  // 确保只在 keydown 时插入换行
-		        insertNewline(event.target);
-		    }
+                insertNewline(event.target);
+            }
 		    return false;  // 阻止事件冒泡
-		}
+        }
         // 桌面端处理：按下Enter键且没有按下Shift键和Alt键，则发送消息
         if (event.key === 'Enter' && !event.shiftKey && !event.altKey) {
             event.preventDefault();
@@ -1648,17 +1648,17 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     // 插入换行的辅助函数
-	function insertNewline(input) {
-	    const start = input.selectionStart;
-	    const end = input.selectionEnd;
-	    const value = input.value;
-	    const beforeCursor = value.substring(0, start);
-	    const afterCursor = value.substring(end);
-	    
-	    input.value = beforeCursor + '\n' + afterCursor;
-	    input.selectionStart = input.selectionEnd = start + 1;
-	    input.dispatchEvent(new Event('input'));
-	}
+    function insertNewline(input) {
+            const start = input.selectionStart;
+            const end = input.selectionEnd;
+            const value = input.value;
+            const beforeCursor = value.substring(0, start);
+            const afterCursor = value.substring(end);
+            
+        input.value = beforeCursor + '\n' + afterCursor;
+        input.selectionStart = input.selectionEnd = start + 1;
+            input.dispatchEvent(new Event('input'));
+    }
 
     // 处理消息的显示
 	function updateMessageDisplay(messageElement, content) {
@@ -2075,7 +2075,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // 创建消息元素
     function createMessageElement(sender, content, isUser = false) {
         const div = document.createElement('div');
-        div.className = `message ${isUser ? 'user-message' : 'ai-message'}`;
+        div.className = `message ${isUser ? 'user' : 'ai-message'}`;
 		div.innerHTML = `            <div class="message-sender">${sender}</div>
             <div class="message-content">${content}</div>
         `;
@@ -2085,7 +2085,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // 添加消息到聊天区域
     function addMessage(content, type) {
         const messageDiv = document.createElement('div');
-        messageDiv.className = `message ${type}`;
+		messageDiv.className = `message ${type === 'user' ? 'user' : 'ai-message'}`;
         
         // 添加发送者标识
         const senderDiv = document.createElement('div');
@@ -2100,49 +2100,79 @@ document.addEventListener('DOMContentLoaded', () => {
         
 		// 用户消息使用 pre 标签保留格式，AI消息使用 Markdown 渲染
 		if (type === 'user') {
-			contentDiv.style.whiteSpace = 'pre-wrap';  // 保留空格和换行
-			contentDiv.style.wordBreak = 'break-word'; // 确保长文本会自动换行
+		    // 新增：判断是否为复合类型
+			console.log('判断是否为复合类型');
+		    if (typeof content === 'object' && content.type === 'imageText') {
+				console.log('判断是复合类型');
+		        // 渲染图片和文本
+		        const imgHtml = content.images.map(src => `<img src="${src}" style="max-width: 200px; max-height: 200px; border-radius: 8px; margin: 4px 8px 4px 0;">`).join('');
+		        // 处理配文中的数学公式
+		        const mathExpressions = [];
+		        let mathIndex = 0;
+		        const textWithPlaceholders = content.text.replace(/(\$\$[\s\S]*?\$\$|\$[^\$\n]+\$|\\begin\{[^}]+\}[\s\S]*?\\end\{[^}]+\}|\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\))/g, (match) => {
+		            mathExpressions.push(match);
+		            return `%%MATH_EXPR_${mathIndex++}%%`;
+		        });
+		        let processedText = textWithPlaceholders
+		            .replace(/&/g, "&amp;")
+		            .replace(/</g, "&lt;")
+		            .replace(/>/g, "&gt;");
+		        const finalText = processedText.replace(/%%MATH_EXPR_(\d+)%%/g, (_, index) => mathExpressions[index]);
+		        const textHtml = `<div style="margin-top:8px;">${finalText}</div>`;
+		        contentDiv.innerHTML = imgHtml + textHtml;
+		        // 触发MathJax渲染
+		        if (window.MathJax && window.MathJax.typesetPromise) {
+		            window.MathJax.typesetPromise([contentDiv]).catch((err) => {
+		                console.error('MathJax渲染错误:', err);
+		            });
+		        }
+		    } else {
+		        // 原有逻辑
+				console.log('判断是原有逻辑');
+		        contentDiv.style.whiteSpace = 'pre-wrap';  // 保留空格和换行
+		        contentDiv.style.wordBreak = 'break-word'; // 确保长文本会自动换行
 
-			// 处理数学公式
-			const mathExpressions = [];
-			let mathIndex = 0;
+		        // 处理数学公式
+		        const mathExpressions = [];
+		        let mathIndex = 0;
 
-			// 临时替换数学公式
-			const contentWithPlaceholders = content.replace(/(\$\$[\s\S]*?\$\$|\$[^\$\n]+\$|\\begin\{[^}]+\}[\s\S]*?\\end\{[^}]+\}|\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\))/g, (match) => {
-				mathExpressions.push(match);
-				return `%%MATH_EXPR_${mathIndex++}%%`;
-			});
+		        // 临时替换数学公式
+		        const contentWithPlaceholders = content.replace(/(\$\$[\s\S]*?\$\$|\$[^\$\n]+\$|\\begin\{[^}]+\}[\s\S]*?\\end\{[^}]+\}|\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\))/g, (match) => {
+		            mathExpressions.push(match);
+		            return `%%MATH_EXPR_${mathIndex++}%%`;
+		        });
 
-			// 转义HTML特殊字符，但保留数学公式占位符
-			let processedContent = contentWithPlaceholders
-				.replace(/&/g, "&amp;")
-				.replace(/</g, "&lt;")
-				.replace(/>/g, "&gt;");
+		        // 转义HTML特殊字符，但保留数学公式占位符
+		        let processedContent = contentWithPlaceholders
+		            .replace(/&/g, "&amp;")
+		            .replace(/</g, "&lt;")
+		            .replace(/>/g, "&gt;");
 
-			// 恢复数学公式
-			const finalContent = processedContent.replace(/%%MATH_EXPR_(\d+)%%/g, (_, index) => mathExpressions[index]);
+		        // 恢复数学公式
+		        const finalContent = processedContent.replace(/%%MATH_EXPR_(\d+)%%/g, (_, index) => mathExpressions[index]);
 
-			contentDiv.innerHTML = finalContent;
+		        contentDiv.innerHTML = finalContent;
 
-			// 触发MathJax渲染
-			if (window.MathJax && window.MathJax.typesetPromise) {
-				window.MathJax.typesetPromise([contentDiv]).catch((err) => {
-					console.error('MathJax渲染错误:', err);
-				});
-			}
+		        // 触发MathJax渲染
+		        if (window.MathJax && window.MathJax.typesetPromise) {
+		            window.MathJax.typesetPromise([contentDiv]).catch((err) => {
+		                console.error('MathJax渲染错误:', err);
+		            });
+		        }
+		    }
 		} else {
-			// AI消息：使用Markdown渲染
-            // 检测是否为移动设备
-            const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-            if (isMobile) {
-                // 添加一个空的div来确保移动端显示完整
-                const spacerDiv = document.createElement('div');
-                spacerDiv.style.height = '100px';  // 设置足够的高度
-                spacerDiv.style.width = '100%';
-                spacerDiv.style.clear = 'both';
-                messageDiv.appendChild(spacerDiv);
-            }
-        updateMessageDisplay(messageDiv, content);
+		    // AI消息：使用Markdown渲染
+		    // 检测是否为移动设备
+		    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+		    if (isMobile) {
+		        // 添加一个空的div来确保移动端显示完整
+		        const spacerDiv = document.createElement('div');
+		        spacerDiv.style.height = '100px';  // 设置足够的高度
+		        spacerDiv.style.width = '100%';
+		        spacerDiv.style.clear = 'both';
+		        messageDiv.appendChild(spacerDiv);
+		    }
+		    updateMessageDisplay(messageDiv, content);
 		}
         
         elements.chatMessages.appendChild(messageDiv);
@@ -2604,7 +2634,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 			// 首先配置MathJax
 			window.MathJax = {
-			    tex: {
+				tex: {
 			        inlineMath: [
 			            ['$', '$'],
 			            ['\\(', '\\)']  // 添加这行确保支持 \(...\) 格式
@@ -2614,16 +2644,16 @@ document.addEventListener('DOMContentLoaded', () => {
 			            ['\\[', '\\]']
 			        ],
 			        packages: ['base', 'ams', 'noerrors', 'noundefined']
-			    },
-			    options: {
-			        skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre']
+				},
+				options: {
+					skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre']
 			    },
 			    startup: {
 			        ready: () => {
 			            console.log('MathJax is loaded and ready');
 			            MathJax.startup.defaultReady();
 			        }
-			    }
+				}
 			};
 
 			// 然后加载资源
@@ -3010,34 +3040,18 @@ document.addEventListener('DOMContentLoaded', () => {
                     return;
                 }
             }
-            // 图片预览
-            const imagePromises = filesList.map(file => {
-                return new Promise(resolve => {
-                    const reader = new FileReader();
-                    reader.onload = function(e) {
-                        resolve(`<img src="${e.target.result}" alt="${file.name}" style="max-width: 200px; max-height: 200px; border-radius: 8px; margin: 4px 8px 4px 0;">`);
-                    };
-                    reader.readAsDataURL(file);
-                });
-            });
-            Promise.all(imagePromises).then(imgTags => {
-                const messageDiv = createMessageElement('user', '');
-                const contentDiv = messageDiv.querySelector('.message-content');
-                contentDiv.innerHTML = imgTags.join('');
-                elements.chatMessages.appendChild(messageDiv);
-                scrollToBottom();
-            });
+            
             // 弹窗
             const subjectDialog = document.createElement('div');
             subjectDialog.className = 'subject-dialog';
             subjectDialog.innerHTML = `
-            <div class="subject-dialog-content">
-                <h3>请选择作业科目</h3>
-                <div class="subject-options">
-                    <button data-subject="chinese">语文</button>
-                    <button data-subject="math">数学</button>
-                    <button data-subject="english">英语</button>
-                </div>
+                <div class="subject-dialog-content">
+                    <h3>请选择作业科目</h3>
+                    <div class="subject-options">
+                        <button data-subject="chinese">语文</button>
+                        <button data-subject="math">数学</button>
+                        <button data-subject="english">英语</button>
+                    </div>
                 <div style="margin-top: 16px;">
                     <label>
                         <input type="checkbox" id="customPromptCheck"> 自定义提示词
@@ -3048,7 +3062,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     <button id="subjectConfirmBtn" style="margin-right: 8px;">确定</button>
                     <button id="subjectCancelBtn">取消</button>
                 </div>
-            </div>
+                </div>
             `;
             const customPromptCheck = subjectDialog.querySelector('#customPromptCheck');
             const customPromptArea = subjectDialog.querySelector('#customPromptArea');
@@ -3071,8 +3085,11 @@ document.addEventListener('DOMContentLoaded', () => {
             // 科目按钮：点击后立即上传
             subjectBtns.forEach(button => {
                 button.addEventListener('click', async () => {
-                    const subject = button.dataset.subject;
-                    document.body.removeChild(subjectDialog);
+                        const subject = button.dataset.subject;
+                        document.body.removeChild(subjectDialog);
+						// 移除预览气泡
+						const previewMsg = document.querySelector('.preview-message');
+						if (previewMsg) previewMsg.remove();
                     await uploadHomework(filesList, subject, '');
                 });
             });
@@ -3084,6 +3101,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     return;
                 }
                 document.body.removeChild(subjectDialog);
+				// 移除预览气泡
+				const previewMsg = document.querySelector('.preview-message');
+				if (previewMsg) previewMsg.remove();
                 await uploadHomework(filesList, 'customs', customPrompt);
             });
             // 取消按钮
@@ -3112,7 +3132,25 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!subject || subject.trim() === '') {
                 throw new Error('请选择作业科目');
             }
-            showSystemMessage('正在上传作业...', 'info');
+            showSystemMessage('正在上传图片...', 'info');
+			// 如果是自定义提示词，插入一条用户文本消息
+			if (subject === 'customs' && customPrompt && customPrompt.trim() !== '') {
+			    await Promise.all(files.map(file => {
+			        return new Promise(resolve => {
+			            const reader = new FileReader();
+			            reader.onload = function(e) {
+			                resolve(e.target.result);
+			            };
+			            reader.readAsDataURL(file);
+			        });
+			    })).then(imgSrcs => {
+			        addMessage({
+			            type: 'imageText',
+			            images: imgSrcs,
+			            text: customPrompt
+			        }, 'user');
+			    });
+			}
             const formData = new FormData();
             files.forEach(file => {
                 formData.append('files', file);
@@ -3127,7 +3165,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // 创建消息容器
             const messageContainer = createMessageElement('assistant', '');
             elements.chatMessages.appendChild(messageContainer);
-            messageContainer.querySelector('.message-content').innerHTML = '<div class="typing-indicator">正在批改作业...</div>';
+            messageContainer.querySelector('.message-content').innerHTML = '<div class="typing-indicator">正在读取图片...</div>';
             // 发送请求，添加完整的请求头
             const response = await fetch('/homework/check', {
                 method: 'POST',
@@ -3217,19 +3255,26 @@ document.addEventListener('DOMContentLoaded', () => {
                             }
                             if (eventData.content) {
                                 fullContent += eventData.content;
-                                if (!isMultiImage) {
-                                    // 单图：原有流式渲染逻辑
+                                // === 修改判断逻辑 ===
+                                if (subject === 'customs') {
+                                    // customPrompt：内容长度变化且末尾不是公式分隔符时渲染
+                                    if (fullContent.length !== lastRenderedContent.length && !endsWithMathDelimiter(fullContent)) {
+                                        tryRender();
+                                    }
+                                } else if (subject === 'math') {
+                                    // math：公式分隔符成对出现时渲染
                                     const openCount = (fullContent.match(/\\\(/g) || []).length;
                                     const closeCount = (fullContent.match(/\\\)/g) || []).length;
                                     if (openCount > 0 && openCount === closeCount) {
                                         tryRender();
                                     }
                                 } else {
-                                    // 多图：内容长度变化且末尾不是公式分隔符时才渲染
+                                    // 其他：内容长度变化且末尾不是公式分隔符时渲染
                                     if (fullContent.length !== lastRenderedContent.length && !endsWithMathDelimiter(fullContent)) {
                                         tryRender();
                                     }
                                 }
+                                // === 结束 ===
                             }
                         } catch (e) {
                             console.error('处理数据时出错:', e);
@@ -3632,8 +3677,8 @@ document.addEventListener('DOMContentLoaded', () => {
                             }
                             
                             // 累积内容
-							if (eventData.content) {
-							    fullContent += eventData.content;
+                            if (eventData.content) {
+                                fullContent += eventData.content;
 
 							    // 检查公式分隔符是否成对出现
 							    const openCount = (fullContent.match(/\\\(/g) || []).length;
@@ -3667,12 +3712,12 @@ document.addEventListener('DOMContentLoaded', () => {
 										
 										if (window.MathJax && window.MathJax.typesetPromise) {
 										    window.MathJax.typesetPromise([messageContainer.querySelector('.message-content')]);
-										}
-							        } catch (renderError) {
-							            console.error('渲染内容时出错:', renderError);
+                                    }
+                                } catch (renderError) {
+                                    console.error('渲染内容时出错:', renderError);
 							        }
-							    }
-							}
+                                }
+                            }
                         } catch (e) {
                             console.error('处理数据时出错:', e);
                             if (e instanceof SyntaxError) {
@@ -3736,23 +3781,23 @@ document.addEventListener('DOMContentLoaded', () => {
 			});
 			//console.log('【还原公式后】', finalRenderedContent);
 			// 4. 插入HTML
-			messageContainer.querySelector('.message-content').innerHTML = finalRenderedContent;
-
+                messageContainer.querySelector('.message-content').innerHTML = finalRenderedContent;
+                
 			// 5. 数学公式渲染
-			if (typeof renderMathInElement === 'function') {
-			    renderMathInElement(messageContainer.querySelector('.message-content'), {
-			        delimiters: [
-			            {left: '$$', right: '$$', display: true},
-			            {left: '$', right: '$', display: false},
-			            {left: '\\(', right: '\\)', display: false},
+                if (typeof renderMathInElement === 'function') {
+                    renderMathInElement(messageContainer.querySelector('.message-content'), {
+                        delimiters: [
+                            {left: '$$', right: '$$', display: true},
+                            {left: '$', right: '$', display: false},
+                            {left: '\\(', right: '\\)', display: false},
 			            {left: '\\[', right: '\\]', display: false}
-			        ],
-			        throwOnError: false
-			    });
-			}
+                        ],
+                        throwOnError: false
+                    });
+                }
 			if (window.MathJax && window.MathJax.typesetPromise) {
 			    MathJax.typesetPromise([messageContainer.querySelector('.message-content')]);
-			}
+            }
         } catch (error) {
             console.error('上传高级版作业时出错:', error);
             updateSessionStatus(SessionStatus.ERROR, {
