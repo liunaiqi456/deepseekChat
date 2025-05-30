@@ -61,90 +61,97 @@ public class ChatController {
     @PostMapping("/stream")
     public SseEmitter streamChat(@RequestBody ChatRequest request) {
         SseEmitter emitter = new SseEmitter(180000L); // 3分钟超时
-        
+        Boolean searchOptions = request.getSearchOptions();
         executorService.execute(() -> {
             try {
-                chatService.streamChat(request.getQuestion(), request.getSessionId(), new ChatService.ChatCallback() {
-                    @Override
-                    public void onMessage(String message) {
-                        try {
-                            // 创建JSON响应
-                            ObjectMapper mapper = new ObjectMapper();
-                            ObjectNode responseJson = mapper.createObjectNode();
-                            responseJson.put("content", message);
-                            
-                            // 发送SSE事件
-                            emitter.send(SseEmitter.event()
-                                .data(mapper.writeValueAsString(responseJson))
-                                .id(String.valueOf(System.currentTimeMillis()))
-                                .name("message"));
-                        } catch (Exception e) {
-                            logger.error("发送消息时出错", e);
-                            handleError(e);
+                if (Boolean.TRUE.equals(searchOptions)) {
+                    // 新逻辑：开启联网查询
+                    chatService.streamChat(request.getQuestion(), request.getSessionId(), true, new ChatService.ChatCallback() {
+                        @Override
+                        public void onMessage(String message) {
+                            try {
+                                ObjectMapper mapper = new ObjectMapper();
+                                ObjectNode responseJson = mapper.createObjectNode();
+                                responseJson.put("content", message);
+                                emitter.send(SseEmitter.event()
+                                    .data(mapper.writeValueAsString(responseJson))
+                                    .id(String.valueOf(System.currentTimeMillis()))
+                                    .name("message"));
+                            } catch (Exception e) {
+                                logger.error("发送消息时出错", e);
+                                handleError(e);
+                            }
                         }
-                    }
-
-                    @Override
-                    public void onError(Throwable throwable) {
-                        handleError(throwable);
-                    }
-
-                    @Override
-                    public void onComplete() {
-                        try {
-                            // 发送完成标记
-                            emitter.send(SseEmitter.event()
-                                .data("[DONE]")
-                                .name("done"));
-                            emitter.complete();
-                        } catch (Exception e) {
-                            logger.error("发送完成消息时出错", e);
+                        @Override
+                        public void onError(Throwable throwable) { handleError(throwable); }
+                        @Override
+                        public void onComplete() {
+                            try {
+                                emitter.send(SseEmitter.event().data("[DONE]").name("done"));
+                                emitter.complete();
+                            } catch (Exception e) { logger.error("发送完成消息时出错", e); }
                         }
-                    }
-
-                    private void handleError(Throwable throwable) {
-                        try {
-                            ObjectMapper mapper = new ObjectMapper();
-                            ObjectNode errorJson = mapper.createObjectNode();
-                            errorJson.put("error", throwable.getMessage());
-                            
-                            emitter.send(SseEmitter.event()
-                                .data(mapper.writeValueAsString(errorJson))
-                                .name("error"));
-            emitter.complete();
-                        } catch (Exception e) {
-                            logger.error("发送错误消息时出错", e);
+                        private void handleError(Throwable throwable) {
+                            try {
+                                ObjectMapper mapper = new ObjectMapper();
+                                ObjectNode errorJson = mapper.createObjectNode();
+                                errorJson.put("error", throwable.getMessage());
+                                emitter.send(SseEmitter.event().data(mapper.writeValueAsString(errorJson)).name("error"));
+                                emitter.complete();
+                            } catch (Exception e) { logger.error("发送错误消息时出错", e); }
                         }
-                    }
-                });
-        } catch (Exception e) {
+                    });
+                } else {
+                    // 沿用旧逻辑
+                    chatService.streamChat(request.getQuestion(), request.getSessionId(), new ChatService.ChatCallback() {
+                        @Override
+                        public void onMessage(String message) {
+                            try {
+                                ObjectMapper mapper = new ObjectMapper();
+                                ObjectNode responseJson = mapper.createObjectNode();
+                                responseJson.put("content", message);
+                                emitter.send(SseEmitter.event()
+                                    .data(mapper.writeValueAsString(responseJson))
+                                    .id(String.valueOf(System.currentTimeMillis()))
+                                    .name("message"));
+                            } catch (Exception e) {
+                                logger.error("发送消息时出错", e);
+                                handleError(e);
+                            }
+                        }
+                        @Override
+                        public void onError(Throwable throwable) { handleError(throwable); }
+                        @Override
+                        public void onComplete() {
+                            try {
+                                emitter.send(SseEmitter.event().data("[DONE]").name("done"));
+                                emitter.complete();
+                            } catch (Exception e) { logger.error("发送完成消息时出错", e); }
+                        }
+                        private void handleError(Throwable throwable) {
+                            try {
+                                ObjectMapper mapper = new ObjectMapper();
+                                ObjectNode errorJson = mapper.createObjectNode();
+                                errorJson.put("error", throwable.getMessage());
+                                emitter.send(SseEmitter.event().data(mapper.writeValueAsString(errorJson)).name("error"));
+                                emitter.complete();
+                            } catch (Exception e) { logger.error("发送错误消息时出错", e); }
+                        }
+                    });
+                }
+            } catch (Exception e) {
                 logger.error("处理请求时出错", e);
                 try {
                     ObjectMapper mapper = new ObjectMapper();
                     ObjectNode errorJson = mapper.createObjectNode();
                     errorJson.put("error", "处理请求时出错: " + e.getMessage());
-                    
-                    emitter.send(SseEmitter.event()
-                        .data(mapper.writeValueAsString(errorJson))
-                        .name("error"));
-                emitter.complete();
-                } catch (Exception ex) {
-                    logger.error("发送错误消息时出错", ex);
-                }
+                    emitter.send(SseEmitter.event().data(mapper.writeValueAsString(errorJson)).name("error"));
+                    emitter.complete();
+                } catch (Exception ex) { logger.error("发送错误消息时出错", ex); }
             }
         });
-
-        // 设置超时和错误处理
-        emitter.onTimeout(() -> {
-            logger.warn("SSE连接超时");
-            emitter.complete();
-        });
-
-        emitter.onError((ex) -> {
-            logger.error("SSE连接出错", ex);
-            emitter.complete();
-        });
-        
+        emitter.onTimeout(() -> { logger.warn("SSE连接超时"); emitter.complete(); });
+        emitter.onError((ex) -> { logger.error("SSE连接出错", ex); emitter.complete(); });
         return emitter;
     }
     
@@ -179,4 +186,5 @@ public class ChatController {
 class ChatRequest {
     private String question;
     private String sessionId;
+    private Boolean searchOptions;
 }

@@ -14,6 +14,7 @@ public interface ChatService {
     String chat(String question, List<Message> history) throws NoApiKeyException, InputRequiredException;
     List<Message> createNewHistory();
     void streamChat(String question, String sessionId, ChatCallback callback);
+    void streamChat(String question, String sessionId, boolean searchOptions, ChatCallback callback);
     void clearHistory(String sessionId);
     List<Message> getHistory(String sessionId);
     void stopStream(String sessionId);

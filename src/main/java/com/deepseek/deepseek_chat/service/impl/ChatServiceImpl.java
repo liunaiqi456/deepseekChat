@@ -169,7 +169,7 @@ public class ChatServiceImpl implements ChatService {
     }
     
     @Override
-    public void streamChat(String question, String sessionId, ChatCallback callback) {
+    public void streamChat(String question, String sessionId, boolean searchOptions, ChatCallback callback) {
         // 1. 读取 HomeworkServiceImpl 的历史
         List<HomeworkServiceImpl.ChatHistoryItem> historyItems = homeworkServiceImpl.getSessionHistory(sessionId);
         List<Message> history = new ArrayList<>();
@@ -190,7 +190,6 @@ public class ChatServiceImpl implements ChatService {
                     .build());
             }
         }
-        // 2. session 相关操作
         try {
             final List<Message> messages = new ArrayList<>(sessionHistory.computeIfAbsent(sessionId, k -> {
                 List<Message> newHistory = new ArrayList<>();
@@ -206,11 +205,25 @@ public class ChatServiceImpl implements ChatService {
                     .content(question)
                     .build();
             messages.add(userMessage);
-
             // 裁剪历史，保证不超tokens
             trimHistoryToFitTokens(messages, 129024);
-
-            GenerationParam param = createGenerationParam(messages, true);
+            GenerationParam param;
+            if (searchOptions) {
+                logger.info("[联网搜索] searchOptions=true，开启联网查询");
+                param = GenerationParam.builder()
+                        .apiKey(apiKey)
+                        .model("qwen-plus")
+                        .messages(messages)
+                        .resultFormat(GenerationParam.ResultFormat.MESSAGE)
+                        .incrementalOutput(true)
+                        .temperature(0.7f)
+                        .topP(0.9D)
+                        .enableSearch(true) // 关键：开启联网
+                        .build();
+            } else {
+                logger.info("[本地模式] searchOptions=false，沿用旧逻辑");
+                param = createGenerationParam(messages, true);
+            }
             Generation gen = new Generation();
             Flowable<GenerationResult> result = gen.streamCall(param);
             StringBuilder finalContent = new StringBuilder();
@@ -325,5 +338,10 @@ public class ChatServiceImpl implements ChatService {
             .role(Role.ASSISTANT.getValue())
             .content(aiReply)
             .build());
+    }
+
+    @Override
+    public void streamChat(String question, String sessionId, ChatCallback callback) {
+        streamChat(question, sessionId, false, callback);
     }
 } 

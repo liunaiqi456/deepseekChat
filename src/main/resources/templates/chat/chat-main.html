@@ -89,6 +89,8 @@
             border-radius: 4px !important;
             box-shadow: 0 2px 4px rgba(0,0,0,0.05) !important;
         }
+
+
     </style>
     <script>
         console.log('开始初始化页面脚本...');
@@ -194,7 +196,12 @@
             <form id="chat-form" class="chat-form">
                 <div class="input-toolbar">
                     <button type="button" id="show-report" class="tool-button" title="查看学习报告">
-                        📊 学习报告
+                        <svg width="20" height="20" viewBox="0 0 24 24" style="vertical-align: middle;">
+                            <rect x="3" y="4" width="4" height="17" fill="#4285F4"/>   <!-- 蓝色 -->
+                            <rect x="10" y="6" width="4" height="15" fill="#FBBC05"/>   <!-- 黄色 -->
+                            <rect x="17" y="2" width="4" height="19" fill="#34A853"/>   <!-- 绿色 -->
+                          </svg>
+                          <span style="margin-left:4px;">学习报告</span>
                     </button>
                     <div class="divider"></div>
                     <button type="button" id="add-button" class="tool-button" title="添加文件">
@@ -203,7 +210,18 @@
                             <line x1="5" y1="12" x2="19" y2="12"></line>
                         </svg>
                     </button>
+
                     <div class="divider"></div>
+                    <button class="tool-button" id="search-online-btn" type="button">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;">
+                            <circle cx="12" cy="12" r="10"/>
+                            <ellipse cx="12" cy="12" rx="10" ry="4"/>
+                            <path d="M2 12h20"/>
+                            <path d="M12 2a15.3 15.3 0 0 1 0 20"/>
+                            <path d="M12 2a15.3 15.3 0 0 0 0 20"/>
+                          </svg>
+                        <span style="margin-left:6px;color:#444;">联网</span>
+                    </button>
                 </div>
                 
                 <!-- 上传功能下拉菜单 -->

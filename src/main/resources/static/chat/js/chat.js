@@ -1838,10 +1838,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 headers: {
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({ 
-                    question: question,
-                    sessionId: sessionId || ''  // 确保sessionId不为undefined
-                }),
+				body: JSON.stringify({ 
+				    question: question,
+				    sessionId: sessionId || '',
+				    searchOptions: searchOptions // 只在这里用
+				}),
                 signal: streamAbortController.signal
             });
 
@@ -2101,9 +2102,7 @@ document.addEventListener('DOMContentLoaded', () => {
 		// 用户消息使用 pre 标签保留格式，AI消息使用 Markdown 渲染
 		if (type === 'user') {
 		    // 新增：判断是否为复合类型
-			console.log('判断是否为复合类型');
 		    if (typeof content === 'object' && content.type === 'imageText') {
-				console.log('判断是复合类型');
 		        // 渲染图片和文本
 		        const imgHtml = content.images.map(src => `<img src="${src}" style="max-width: 200px; max-height: 200px; border-radius: 8px; margin: 4px 8px 4px 0;">`).join('');
 		        // 处理配文中的数学公式
@@ -2128,7 +2127,6 @@ document.addEventListener('DOMContentLoaded', () => {
 		        }
 		    } else {
 		        // 原有逻辑
-				console.log('判断是原有逻辑');
 		        contentDiv.style.whiteSpace = 'pre-wrap';  // 保留空格和换行
 		        contentDiv.style.wordBreak = 'break-word'; // 确保长文本会自动换行
 
@@ -3874,3 +3872,61 @@ function renderMathInElement(element, options) {
         });
     }
 }
+
+// 联网状态logo切换逻辑
+(function() {
+    function updateNetworkLogo() {
+        console.log('更新联网状态logo');
+        var logoDiv = document.getElementById('network-status-logo');
+        if (!logoDiv) return;
+        if (navigator.onLine) {
+            // 绿色联网logo
+            logoDiv.innerHTML = '<svg width="32" height="32"><circle cx="16" cy="16" r="14" fill="#4CAF50"/><text x="16" y="22" text-anchor="middle" fill="#fff" font-size="16" font-family="Arial" dy="0">网</text></svg>';
+            logoDiv.title = '当前已联网';
+        } else {
+            // 灰色离线logo
+            logoDiv.innerHTML = '<svg width="32" height="32"><circle cx="16" cy="16" r="14" fill="#BDBDBD"/><text x="16" y="22" text-anchor="middle" fill="#fff" font-size="16" font-family="Arial" dy="0">网</text></svg>';
+            logoDiv.title = '当前离线';
+        }
+    }
+    window.addEventListener('online', updateNetworkLogo);
+    window.addEventListener('offline', updateNetworkLogo);
+    document.addEventListener('DOMContentLoaded', updateNetworkLogo);
+    // 若页面已加载也要初始化
+    if (document.readyState === 'complete' || document.readyState === 'interactive') {
+        updateNetworkLogo();
+    }
+})();
+
+
+// 联网搜索按钮状态管理
+var searchOptions = false;
+function updateSearchOnlineBtnStyle() {
+    var btn = document.getElementById('search-online-btn');
+    if (!btn) return;
+    if (searchOptions) {
+        btn.style.background = '#4CAF50'; // 绿色
+        btn.style.color = '#fff';
+        btn.querySelector('svg').style.stroke = '#fff';
+        btn.querySelector('span').style.color = '#fff';
+    } else {
+        btn.style.background = '#f5f5f5'; // 灰色
+        btn.style.color = '#444';
+        btn.querySelector('svg').style.stroke = '#444';
+        btn.querySelector('span').style.color = '#444';
+    }
+}
+document.addEventListener('DOMContentLoaded', function() {
+    var searchOnlineBtn = document.getElementById('search-online-btn');
+    if (searchOnlineBtn) {
+        // 初始化为灰色
+        searchOptions = false;
+        updateSearchOnlineBtnStyle();
+        searchOnlineBtn.addEventListener('click', function() {
+            searchOptions = !searchOptions;
+            updateSearchOnlineBtnStyle();
+            // 不要在这里发送消息或调用fetch
+            // 也不要alert或console.log（除非调试用）
+        });
+    }
+});
