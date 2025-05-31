@@ -2200,12 +2200,6 @@ document.addEventListener('DOMContentLoaded', () => {
         elements.chatMessages.scrollTop = elements.chatMessages.scrollHeight;
     }
 
-    function decodeHtmlEntities(text) {
-        const tempDiv = document.createElement('div');
-        tempDiv.innerHTML = text;
-        return tempDiv.textContent;
-    }
-
     // 更新消息内容
     function updateMessageContent(messageDiv, content, isError = false) {
         const contentDiv = messageDiv.querySelector('.message-content');

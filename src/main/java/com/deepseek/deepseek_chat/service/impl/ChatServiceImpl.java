@@ -93,17 +93,23 @@ public class ChatServiceImpl implements ChatService {
         return sessions.containsKey(sessionId);
     }
     
+    /** 最大重试次数 */
+    private static final int MAX_RETRIES = 3;
+
     @Override
     public String chat(String question, List<Message> history) throws NoApiKeyException, InputRequiredException {
-        System.out.println("【调试】ChatServiceImpl.chat方法被调用，参数：" + question);
-        int maxRetries = 3;
+        if (question == null || question.isEmpty()) {
+            throw new InputRequiredException("问题不能为空");
+        }
+        
+        Message userMessage = Message.builder()
+                .role(Role.USER.getValue())
+                .content(question)
+                .build();
+        
         int currentRetry = 0;
-        while (currentRetry < maxRetries) {
+        while (currentRetry < MAX_RETRIES) {
             try {
-                Message userMessage = Message.builder()
-                        .role(Role.USER.getValue())
-                        .content(question)
-                        .build();
                 List<Message> messages = new ArrayList<>();
                 if (history.isEmpty()) {
                     Message systemMessage = Message.builder()
@@ -139,9 +145,9 @@ public class ChatServiceImpl implements ChatService {
             } catch (ApiException e) {
                 currentRetry++;
                 logger.error("API调用失败，尝试第{}次重试，错误: {}", currentRetry, e.getMessage());
-                if (currentRetry >= maxRetries) {
-                    logger.error("达到最大重试次数，放弃重试");
-                    throw e;
+                if (currentRetry >= MAX_RETRIES) {
+                    logger.error("达到最大重试次数({})，放弃重试", MAX_RETRIES);
+                    throw new RuntimeException("API调用失败，已重试" + MAX_RETRIES + "次", e);
                 }
                 try {
                     Thread.sleep((long) (Math.pow(2, currentRetry) * 1000));
@@ -154,7 +160,11 @@ public class ChatServiceImpl implements ChatService {
                 throw e;
             }
         }
-        throw new RuntimeException("超过最大重试次数后仍然失败");
+        // 注意：此行代码实际上永远不会被执行到，因为：
+        // 1. 如果 MAX_RETRIES > 0，循环内部会在达到最大重试次数时抛出异常
+        // 2. 如果成功，会在循环内部通过 return response 返回
+        // 保留此检查仅作为防御性编程
+        throw new RuntimeException("意外的执行流程：超过最大重试次数(" + MAX_RETRIES + ")后仍然失败");
     }
     
     @Override
