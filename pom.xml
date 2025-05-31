@@ -21,8 +21,22 @@
 
 	<properties>
 		<java.version>1.8</java.version>
+		<maven.compiler.source>${java.version}</maven.compiler.source>
+		<maven.compiler.target>${java.version}</maven.compiler.target>
 		<spring-ai.version>0.9.0</spring-ai.version> <!-- 降级或选择稳定版 -->
+		<aliyun.version>4.5.0</aliyun.version>
 	</properties>
+
+	<repositories>
+		<repository>
+			<id>aliyun</id>
+			<name>aliyun Repository</name>
+			<url>https://maven.aliyun.com/repository/public</url>
+			<snapshots>
+				<enabled>false</enabled>
+			</snapshots>
+		</repository>
+	</repositories>
 
 	<dependencies>
 		<dependency>
@@ -52,6 +66,12 @@
 			<!-- 请将 'the-latest-version'
 			替换为最新版本号：https://mvnrepository.com/artifact/com.alibaba/dashscope-sdk-java -->
 			<version>2.18.3</version>
+			<exclusions>
+				<exclusion>
+					<groupId>org.slf4j</groupId>
+					<artifactId>slf4j-simple</artifactId>
+				</exclusion>
+			</exclusions>
 		</dependency>
 		<dependency>
 			<groupId>org.apache.commons</groupId>
@@ -110,6 +130,29 @@
 			<artifactId>spring-boot-starter-thymeleaf</artifactId>
 		</dependency>
 
+		<!-- 阿里云语音服务SDK -->
+		<dependency>
+			<groupId>com.alibaba.nls</groupId>
+			<artifactId>nls-sdk-transcriber</artifactId>
+			<version>2.2.14</version>
+		</dependency>
+		<dependency>
+			<groupId>com.alibaba.nls</groupId>
+			<artifactId>nls-sdk-common</artifactId>
+			<version>2.2.14</version>
+		</dependency>
+		<dependency>
+			<groupId>com.alibaba.nls</groupId>
+			<artifactId>nls-sdk-tts</artifactId>
+			<version>2.2.14</version>
+		</dependency>
+
+		<!-- Netty依赖，版本需要在4.1.17.Final及以上 -->
+		<dependency>
+			<groupId>io.netty</groupId>
+			<artifactId>netty-all</artifactId>
+		</dependency>
+
 		<!-- 内嵌tomcat依赖 -->
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
@@ -122,6 +165,7 @@
 			<artifactId>commons-codec</artifactId>
 			<version>1.15</version>
 		</dependency>
+
 	</dependencies>
 
 	<dependencyManagement>
@@ -148,8 +192,8 @@
 				<artifactId>maven-compiler-plugin</artifactId>
 				<version>3.10.1</version>
 				<configuration>
-					<source>1.8</source>
-					<target>1.8</target>
+					<source>${java.version}</source>
+					<target>${java.version}</target>
 					<annotationProcessorPaths>
 						<path>
 							<groupId>org.projectlombok</groupId>
