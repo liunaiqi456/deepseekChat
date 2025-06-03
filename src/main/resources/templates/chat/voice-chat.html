@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="theme-color" content="#10b981">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <!-- 允许麦克风访问 -->
+    <!-- 移除限制性的权限策略 -->
+    <title>AI Voice Call</title>
+    <!-- 阻止浏览器请求 favicon.ico -->
+    <link rel="icon" href="data:,">
+    <!-- 优先使用本地 tailwind.min.css，如果本地文件不可用则使用 CDN 版本 -->
+    <link rel="stylesheet" th:href="@{/chat/css/tailwind.min.css}" onerror="this.onerror=null;this.href='https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css';">
+    <link rel="stylesheet" th:href="@{/chat/css/voice-chat.css}">
+</head>
+<body class="bg-white min-h-screen flex flex-col">
+    <!-- 顶部导航 -->
+    <header class="flex justify-between items-center py-3 px-4 border-b">
+        <div class="flex-1"></div> <!-- 左侧空白占位 -->
+        <h1 class="text-xl font-bold flex-2 text-center">AI Voice Call</h1>
+        <div class="flex-1 text-right">
+            <button id="subtitleToggle" class="px-3 py-1 border rounded-full text-sm">
+                Subtitle
+            </button>
+        </div>
+    </header>
+    
+    <!-- 主内容区 -->
+    <main class="flex-1 flex flex-col items-center p-4 overflow-hidden">
+        <!-- AI头像和计时器组合区域 -->
+        <div class="avatar-container mb-4 relative">
+            <div class="w-32 h-32 flex items-center justify-center">
+                <!-- 简洁的机器人头部设计 -->
+                <div class="w-28 h-28 bg-white rounded-full flex items-center justify-center relative shadow-md robot-head">
+                    <!-- 黑色面部区域 -->
+                    <div class="w-20 h-12 bg-black rounded-3xl absolute robot-face" style="top: 42%">
+                        <!-- 粉色嘴巴区域 -->
+                        <div class="w-12 h-2.5 bg-pink-500 rounded-full absolute robot-mouth" style="bottom: 2.5px; left: 50%; transform: translateX(-50%)"></div>
+                    </div>
+                    <!-- 天线 -->
+                    <div class="absolute robot-antenna" style="top: -15px">
+                        <div class="w-0.5 h-10 bg-gray-800 relative">
+                            <div class="w-2.5 h-2.5 bg-gray-300 rounded-full absolute" style="top: -4px; left: -1px"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 通话计时器 -->
+            <div class="text-gray-500 mt-4 mb-2" id="callTimer">00:00</div>
+            
+            <!-- 状态提示 -->
+            <div class="text-indigo-500 font-medium text-center mb-4" id="statusText">
+                Ready to talk...
+            </div>
+        </div>
+        
+        <!-- 字幕区域 -->
+        <div id="subtitleArea" class="w-full max-w-md text-center mb-8 hidden">
+            <p id="subtitleText" class="text-gray-700"></p>
+        </div>
+        
+        <!-- 消息容器 -->
+        <div id="messageContainer" class="w-full max-w-md overflow-y-auto flex-1 mb-4">
+            <!-- 消息将在这里动态添加 -->
+        </div>
+    </main>
+
+    <!-- 设置区域 (默认隐藏) -->
+    <div id="settingsPanel" class="fixed inset-0 bg-white z-50 p-4 hidden">
+        <div class="flex justify-between items-center mb-6">
+            <h2 class="text-lg font-semibold">设置</h2>
+            <button id="closeSettings" class="p-2">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                </svg>
+            </button>
+        </div>
+        
+        <!-- 对话模式 -->
+        <div class="mb-6">
+            <h3 class="font-medium mb-2">对话模式</h3>
+            <div class="grid grid-cols-2 gap-4">
+                <div class="mode-button active" id="naturalMode">
+                    自然对话模式
+                </div>
+                <div class="mode-button" id="pushToTalkMode">
+                    按键说话模式
+                </div>
+            </div>
+        </div>
+
+        <!-- 智能打断 -->
+        <div class="flex items-center justify-between mb-4">
+            <div>
+                <h3 class="font-medium">智能打断</h3>
+                <p class="text-sm text-gray-500">根据声音和环境智能判断打断</p>
+            </div>
+            <label class="toggle-switch">
+                <input type="checkbox" id="interruptToggle">
+                <span class="toggle-slider"></span>
+            </label>
+        </div>
+    </div>
+
+    <!-- 底部控制栏 -->
+    <footer class="fixed bottom-0 p-4 w-full flex flex-col items-center justify-center z-10">
+        <!-- 控制按钮区域 -->
+        <div class="flex justify-center w-full" style="padding-left: 15px;">
+            <div class="flex space-x-16 control-area">
+                <!-- 挂断按钮组 -->
+                <div class="flex flex-col items-center button-group">
+                    <button id="callBtn" class="w-14 h-14 rounded-full text-white flex items-center justify-center shadow-lg mb-2">
+                        <!-- 通话图标 - 默认显示拨打电话图标 -->
+                        <svg id="callIcon" class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" width="24" height="24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"></path>
+                        </svg>
+                        <!-- 挂断图标 - 初始隐藏 -->
+                        <svg id="hangupIcon" class="w-6 h-6 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24" width="24" height="24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                    </button>
+                    <div class="text-center text-xs text-gray-400"><span id="connectionStatus">Handup</span></div>
+                </div>
+                
+                <!-- 麦克风按钮组 -->
+                <div class="flex flex-col items-center button-group">
+                    <button id="micBtn" class="w-14 h-14 rounded-full flex items-center justify-center shadow mb-2">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" width="24" height="24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"></path>
+                        </svg>
+                    </button>
+                    <div class="text-center text-xs text-gray-400"><span id="micStatus">按住说话</span></div>
+                </div>
+            </div>
+        </div>
+    </footer>
+    
+    <!-- 引入外部JavaScript文件 -->
+    <script th:src="@{/chat/js/voice-chat.js}"></script>
+</body>
+</html>

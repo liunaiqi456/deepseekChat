@@ -44,8 +44,8 @@ public class SecurityHeadersFilter extends OncePerRequestFilter {
         response.setHeader("Pragma", "no-cache");
         response.setHeader("Expires", "0");
         
-        // 添加其他安全头部
-        response.setHeader("Permissions-Policy", "geolocation=(), microphone=(), camera=()");
+        // 添加其他安全头部 - 允许麦克风访问
+        response.setHeader("Permissions-Policy", "geolocation=(), microphone=(self), camera=()");
         response.setHeader("Cross-Origin-Embedder-Policy", "require-corp");
         response.setHeader("Cross-Origin-Opener-Policy", "same-origin");
         response.setHeader("Cross-Origin-Resource-Policy", "same-origin");

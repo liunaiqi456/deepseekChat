@@ -25,13 +25,25 @@
 		<maven.compiler.target>${java.version}</maven.compiler.target>
 		<spring-ai.version>0.9.0</spring-ai.version> <!-- 降级或选择稳定版 -->
 		<aliyun.version>4.5.0</aliyun.version>
+		<aliyun.nls.version>2.2.14</aliyun.nls.version>
 	</properties>
 
 	<repositories>
 		<repository>
-			<id>aliyun</id>
-			<name>aliyun Repository</name>
+			<id>spring-milestones</id>
+			<name>Spring Milestones</name>
+			<url>https://repo.spring.io/milestone</url>
+			<snapshots>
+				<enabled>false</enabled>
+			</snapshots>
+		</repository>
+		<repository>
+			<id>aliyun-maven</id>
+			<name>Aliyun Maven Repository</name>
 			<url>https://maven.aliyun.com/repository/public</url>
+			<releases>
+				<enabled>true</enabled>
+			</releases>
 			<snapshots>
 				<enabled>false</enabled>
 			</snapshots>
@@ -72,6 +84,13 @@
 					<artifactId>slf4j-simple</artifactId>
 				</exclusion>
 			</exclusions>
+		</dependency>
+		
+		<!-- 阿里云智能语音交互 -->
+		<dependency>
+			<groupId>com.alibaba.nls</groupId>
+			<artifactId>nls-sdk-transcriber</artifactId>
+			<version>${aliyun.nls.version}</version>
 		</dependency>
 		<dependency>
 			<groupId>org.apache.commons</groupId>
@@ -133,11 +152,6 @@
 		<!-- 阿里云语音服务SDK -->
 		<dependency>
 			<groupId>com.alibaba.nls</groupId>
-			<artifactId>nls-sdk-transcriber</artifactId>
-			<version>2.2.14</version>
-		</dependency>
-		<dependency>
-			<groupId>com.alibaba.nls</groupId>
 			<artifactId>nls-sdk-common</artifactId>
 			<version>2.2.14</version>
 		</dependency>
@@ -145,6 +159,22 @@
 			<groupId>com.alibaba.nls</groupId>
 			<artifactId>nls-sdk-tts</artifactId>
 			<version>2.2.14</version>
+		</dependency>
+		
+		<!-- 阿里云OpenAPI SDK -->
+		<dependency>
+			<groupId>com.aliyun</groupId>
+			<artifactId>aliyun-java-sdk-core</artifactId>
+			<version>4.6.0</version>
+		</dependency>
+		<dependency>
+			<groupId>com.alibaba</groupId>
+			<artifactId>fastjson</artifactId>
+			<version>1.2.83</version>
+		</dependency>
+		<dependency>
+			<groupId>org.apache.httpcomponents</groupId>
+			<artifactId>httpclient</artifactId>
 		</dependency>
 
 		<!-- Netty依赖，版本需要在4.1.17.Final及以上 -->

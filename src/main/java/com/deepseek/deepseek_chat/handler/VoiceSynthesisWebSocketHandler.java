@@ -78,10 +78,34 @@ public class VoiceSynthesisWebSocketHandler extends AbstractWebSocketHandler {
     @Override
     public void afterConnectionClosed(@NonNull WebSocketSession session, @NonNull CloseStatus status) {
         log.info("WebSocket连接已关闭: {}, 状态: {}", session.getId(), status);
-        // 清理资源
-        SpeechSynthesizer synthesizer = synthesizerMap.remove(session.getId());
-        if (synthesizer != null) {
-            synthesizer.close();
+        // 无论连接如何关闭，都确保资源被释放
+        safelyCloseSynthesizer(session.getId());
+    }
+    
+    @Override
+    public void handleTransportError(@NonNull WebSocketSession session, @NonNull Throwable exception) {
+        log.error("WebSocket传输错误: {}, 异常: {}", session.getId(), exception.getMessage());
+        // 发生传输错误时也要确保资源被释放
+        safelyCloseSynthesizer(session.getId());
+    }
+    
+    /**
+     * 安全地关闭语音合成器，确保即使在异常情况下资源也能被释放
+     */
+    private void safelyCloseSynthesizer(String sessionId) {
+        try {
+            SpeechSynthesizer synthesizer = synthesizerMap.remove(sessionId);
+            if (synthesizer != null) {
+                try {
+                    synthesizer.close();
+                    log.debug("已关闭会话ID为{}的语音合成器", sessionId);
+                } catch (Exception e) {
+                    log.error("关闭语音合成器时发生错误: {}", e.getMessage());
+                }
+            }
+        } catch (Exception e) {
+            // 捕获所有可能的异常，确保不会影响WebSocket的关闭流程
+            log.error("关闭语音合成器过程中发生未预期的异常: {}", e.getMessage());
         }
     }
 

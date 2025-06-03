@@ -7,6 +7,7 @@ import org.springframework.web.socket.config.annotation.WebSocketConfigurer;
 import org.springframework.web.socket.config.annotation.WebSocketHandlerRegistry;
 
 import com.deepseek.deepseek_chat.handler.ChatWebSocketHandler;
+import com.deepseek.deepseek_chat.handler.VoiceRecognitionWebSocketHandler;
 import com.deepseek.deepseek_chat.handler.VoiceSynthesisWebSocketHandler;
 
 import lombok.RequiredArgsConstructor;
@@ -18,6 +19,7 @@ public class WebSocketConfig implements WebSocketConfigurer {
 
     private final ChatWebSocketHandler chatWebSocketHandler;
     private final VoiceSynthesisWebSocketHandler voiceSynthesisWebSocketHandler;
+    private final VoiceRecognitionWebSocketHandler voiceRecognitionWebSocketHandler;
 
     @Override
     public void registerWebSocketHandlers(@NonNull WebSocketHandlerRegistry registry) {
@@ -27,7 +29,12 @@ public class WebSocketConfig implements WebSocketConfigurer {
                .setAllowedOriginPatterns("*");
 
         // 注册语音合成WebSocket处理器
-        registry.addHandler(voiceSynthesisWebSocketHandler, "/ws/voice/**")
+        registry.addHandler(voiceSynthesisWebSocketHandler, "/ws/voice/synthesis")
+               .setAllowedOrigins("http://localhost:8080")
+               .setAllowedOriginPatterns("*");
+               
+        // 注册语音识别WebSocket处理器
+        registry.addHandler(voiceRecognitionWebSocketHandler, "/ws/voice/recognition")
                .setAllowedOrigins("http://localhost:8080")
                .setAllowedOriginPatterns("*");
     }
