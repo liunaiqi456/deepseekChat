@@ -25,6 +25,7 @@ public class CspReportOnlyFilter extends OncePerRequestFilter {
             "script-src 'self' 'unsafe-inline' 'unsafe-eval'; " +
             "style-src 'self' 'unsafe-inline'; " +
             "img-src 'self' data:; " +
+            "media-src 'self' blob:; " +
             "connect-src 'self' ws://* wss://* http://* https://*; " +
             "report-uri /csp-report");
             

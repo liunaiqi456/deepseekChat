@@ -26,6 +26,7 @@ public class SecurityHeadersFilter extends OncePerRequestFilter {
             "script-src 'self' 'unsafe-inline' 'unsafe-eval'; " +
             "style-src 'self' 'unsafe-inline'; " +
             "img-src 'self' data:; " +
+            "media-src * blob:; " +
             "connect-src 'self' ws://localhost:8081 wss://localhost:8081 http://localhost:8080 https://localhost:8080; " +  // 明确指定允许的连接
             "frame-ancestors 'none'; " +
             "form-action 'self'; " +
