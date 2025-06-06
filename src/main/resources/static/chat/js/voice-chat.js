@@ -16,6 +16,27 @@ let callStartTime = null;
 let callTimer = null;
 let reconnectTimer = null;
 let heartbeatInterval = null;
+let sessionId = null; // 当前会话ID
+
+/**
+ * 生成UUID用于会话标识
+ * @returns {string} UUID字符串
+ */
+function generateUUID() {
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+        var r = Math.random() * 16 | 0,
+            v = c == 'x' ? r : (r & 0x3 | 0x8);
+        return v.toString(16);
+    });
+}
+
+// 心跳相关变量
+let heartbeatTimer = null;
+let heartbeatTimeoutTimer = null;
+
+// 音频轨道相关变量
+let currentAudioTrack = null;
+let currentStream = null;
 
 // 静音检测相关变量
 let lastAudioActivity = 0;
@@ -86,23 +107,24 @@ let reconnectDelay = 2000; // 初始重连延迟2秒
 // 计时器相关变量
 let callDuration = 0;
 
-// DOM元素
-const statusText = document.getElementById('statusText');
-const callTimerElement = document.getElementById('callTimer');
-const subtitleArea = document.getElementById('subtitleArea');
-const subtitleText = document.getElementById('subtitleText');
-const micBtn = document.getElementById('micBtn');
-const callBtn = document.getElementById('callBtn');
-const callIcon = document.getElementById('callIcon');
-const hangupIcon = document.getElementById('hangupIcon');
-const subtitleToggle = document.getElementById('subtitleToggle');
-const settingsPanel = document.getElementById('settingsPanel');
-const closeSettings = document.getElementById('closeSettings');
-const interruptToggle = document.getElementById('interruptToggle');
-const naturalMode = document.getElementById('naturalMode');
-const pushToTalkMode = document.getElementById('pushToTalkMode');
-const connectionStatus = document.getElementById('connectionStatus');
-const micStatus = document.getElementById('micStatus');
+// DOM元素 - 使用let而非const，允许在ensureUIElements中重新赋值
+let statusText = document.getElementById('statusText');
+let callTimerElement = document.getElementById('callTimer');
+let subtitleArea = document.getElementById('subtitleArea');
+let subtitleText = document.getElementById('subtitleText');
+let micBtn = document.getElementById('micBtn');
+let micStatus = document.getElementById('micStatus'); // 添加缺失的micStatus变量
+let callBtn = document.getElementById('callBtn');
+let callIcon = document.getElementById('callIcon');
+let hangupIcon = document.getElementById('hangupIcon');
+let subtitleToggle = document.getElementById('subtitleToggle');
+let settingsPanel = document.getElementById('settingsPanel');
+let closeSettings = document.getElementById('closeSettings');
+let interruptToggle = document.getElementById('interruptToggle');
+let naturalMode = document.getElementById('naturalMode');
+let pushToTalkMode = document.getElementById('pushToTalkMode');
+let connectionStatus = document.getElementById('connectionStatus');
+// micStatus已在上面声明，这里不再重复声明
 
 // 状态变量
 let showSubtitles = false;
@@ -222,19 +244,45 @@ function initRecognitionWebSocket() {
         reconnectAttempts = 0;
         reconnectDelay = 2000;
         
-        // 发送初始配置
-        const config = {
+        // 生成新的会话ID
+        sessionId = generateUUID();
+        console.log("新会话ID生成:", sessionId);
+        
+        // 发送阿里云标准格式的初始配置
+        const aliConfig = {
+            header: {
+                message_id: generateUUID(),
+                task_id: sessionId,
+                namespace: "SpeechRecognizer",
+                name: "StartRecognition",
+                appkey: "default" // 如果有实际的appkey应该替换
+            },
+            payload: {
+                format: "pcm",
+                sample_rate: 16000,
+                enable_intermediate_result: true,
+                enable_punctuation_prediction: true,
+                enable_inverse_text_normalization: true
+            }
+        };
+        
+        // 发送阿里云标准格式的配置
+        recognitionSocket.send(JSON.stringify(aliConfig));
+        console.log("发送阿里云标准配置:", aliConfig);
+        
+        // 发送本地配置
+        const localConfig = {
             type: "config",
             interrupt: interruptToggle.checked
         };
-        recognitionSocket.send(JSON.stringify(config));
+        recognitionSocket.send(JSON.stringify(localConfig));
         
         // 启动心跳
         startHeartbeat();
         
         // 初始化会话状态
         updateSessionState({
-            id: Date.now(),
+            id: sessionId,
             startTime: Date.now(),
             status: 'active'
         });
@@ -727,7 +775,6 @@ function initAudio() {
             console.warn("警告：浏览器不支持16kHz采样率，实际采样率为", audioContext.sampleRate, "Hz");
             console.log("将在发送音频数据前进行采样率转换");
         }
-        console.warn("这可能导致语音识别质量下降，请考虑实现采样率转换");
     } catch (e) {
         console.error("Web Audio API不受支持:", e);
         addMessage("错误", "您的浏览器不支持Web Audio API", "error");
@@ -1013,8 +1060,40 @@ function startRecording() {
                                 console.log("已添加人工信号增强音频数据");
                             }
                             
-                            // 直接发送Int16Array的ArrayBuffer
-                            recognitionSocket.send(pcmData.buffer);
+                            // 使用阿里云标准格式发送音频数据
+                            // 首先发送标准格式的音频数据头部信息
+                            const audioHeader = {
+                                header: {
+                                    message_id: generateUUID(),
+                                    task_id: sessionId,
+                                    namespace: "SpeechRecognizer",
+                                    name: "SendAudio"
+                                },
+                                payload: {
+                                    format: "pcm",
+                                    sample_rate: 16000,
+                                    audio_chunk: "", // 空字符串，实际音频数据将作为二进制数据发送
+                                    sequence_id: Date.now() // 使用时间戳作为序列ID
+                                }
+                            };
+                            
+                            // 尝试使用两种方式发送音频数据
+                            // 方式1: 先发送头部信息，再发送音频数据
+                            try {
+                                recognitionSocket.send(JSON.stringify(audioHeader));
+                                recognitionSocket.send(pcmData.buffer);
+                                console.log("发送音频数据方式1成功");
+                            } catch (error) {
+                                console.error("发送音频数据方式1失败:", error);
+                                
+                                // 方式2: 直接发送原始数据（兼容旧方式）
+                                try {
+                                    recognitionSocket.send(pcmData.buffer);
+                                    console.log("发送音频数据方式2成功");
+                                } catch (error2) {
+                                    console.error("发送音频数据方式2失败:", error2);
+                                }
+                            }
                             
                             // 更新最后发送时间
                             window.lastAudioSendTime = Date.now();
@@ -1119,6 +1198,7 @@ function startRecording() {
 
 /**
  * 开始心跳
+ * 按照阿里云要求，每10秒发送一次心跳消息避免IDLE_TIMEOUT
  */
 function startHeartbeat() {
     // 清除可能存在的心跳定时器
@@ -1133,7 +1213,9 @@ function startHeartbeat() {
         heartbeatTimeoutTimer = null;
     }
     
-    // 设置新的心跳定时器
+    // 设置新的心跳定时器 - 每10秒发送一次心跳
+    const HEARTBEAT_INTERVAL = 10000; // 10秒，符合阿里云要求
+    
     heartbeatTimer = setInterval(() => {
         if (recognitionSocket && recognitionSocket.readyState === WebSocket.OPEN) {
             // 发送心跳消息
@@ -1469,6 +1551,7 @@ function handleCallButtonClick() {
 /**
  * 采样率转换函数
  * 将音频数据从原始采样率转换为目标采样率
+ * 使用线性插值法提高转换质量
  */
 function resampleAudio(audioData, originalSampleRate, targetSampleRate) {
     // 如果采样率相同，无需转换
@@ -1483,11 +1566,19 @@ function resampleAudio(audioData, originalSampleRate, targetSampleRate) {
     const newLength = Math.round(audioData.length / ratio);
     const result = new Float32Array(newLength);
     
-    // 简单的采样率转换实现
-    // 这是一种基本的降采样方法，对于语音识别可能足够
+    // 使用线性插值法进行重采样
+    // 这种方法比简单的点采样效果更好
     for (let i = 0; i < newLength; i++) {
-        const position = Math.round(i * ratio);
-        result[i] = audioData[position < audioData.length ? position : audioData.length - 1];
+        const position = i * ratio;
+        const index = Math.floor(position);
+        const fraction = position - index;
+        
+        // 线性插值
+        if (index + 1 < audioData.length) {
+            result[i] = audioData[index] * (1 - fraction) + audioData[index + 1] * fraction;
+        } else {
+            result[i] = audioData[index];
+        }
     }
     
     return result;
@@ -1496,24 +1587,42 @@ function resampleAudio(audioData, originalSampleRate, targetSampleRate) {
 /**
  * 将Float32Array转换为Int16Array
  * 这是将浮点音频数据转换为16位整数PCM格式
+ * 适配阿里云语音识别服务的要求
  */
 function convertFloat32ToInt16(float32Array) {
     const int16Array = new Int16Array(float32Array.length);
     
-    // 添加一个小的噪声信号，确保不会全为零
-    // 这样可以避免后端认为数据无效
-    const addNoise = true;
+    // 检查音频数据的强度
+    let maxAbs = 0;
+    for (let i = 0; i < float32Array.length; i++) {
+        maxAbs = Math.max(maxAbs, Math.abs(float32Array[i]));
+    }
+    
+    // 判断是否需要添加噪声
+    // 当音频数据很弱时（接近静音），添加小量噪声以确保数据有效
+    const isVeryQuiet = maxAbs < 0.01;
+    const addNoise = true; // 始终添加小量噪声，确保数据不全为零
     
     for (let i = 0; i < float32Array.length; i++) {
-        // 如果启用噪声，添加小量噪声
+        // 获取原始样本值
         let sample = float32Array[i];
+        
+        // 如果音频很弱或启用噪声选项，添加小量噪声
         if (addNoise) {
-            // 添加很小的噪声，范围在 -0.005 到 0.005 之间
-            sample += (Math.random() * 0.01 - 0.005);
+            // 很弱的音频添加稍大一点的噪声，正常音频添加很小的噪声
+            const noiseAmount = isVeryQuiet ? 0.02 : 0.005;
+            sample += (Math.random() * noiseAmount * 2 - noiseAmount);
         }
         
-        // 将-1.0到+1.0的浮点数转换为-32768到32767的整数
+        // 应用增益，增强很弱的音频
+        if (isVeryQuiet) {
+            sample *= 1.5; // 增强50%
+        }
+        
+        // 限制在[-1, 1]范围内
         const s = Math.max(-1, Math.min(1, sample));
+        
+        // 转换为16位整数，范围[-32768, 32767]
         int16Array[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
     }
     
@@ -1677,11 +1786,26 @@ function stopRecording() {
             // 等待一下再发送结束信号
             setTimeout(() => {
                 if (recognitionSocket && recognitionSocket.readyState === WebSocket.OPEN) {
-                    // 发送结束信号
+                    // 发送阿里云标准格式的结束信号
+                    const endMessage = {
+                        header: {
+                            message_id: generateUUID(),
+                            task_id: sessionId,
+                            namespace: "SpeechRecognizer",
+                            name: "StopRecognition"
+                        },
+                        payload: {}
+                    };
+                    
+                    // 发送阿里云标准格式的结束信号
+                    recognitionSocket.send(JSON.stringify(endMessage));
+                    console.log('发送阿里云标准格式结束信号:', endMessage);
+                    
+                    // 同时发送本地格式的结束信号（兼容旧代码）
                     recognitionSocket.send(JSON.stringify({
                         type: "end"
                     }));
-                    console.log('发送结束信号');
+                    console.log('发送本地格式结束信号');
                 }
             }, 500); // 等待500ms再发送结束信号
         } catch (error) {
