@@ -26,7 +26,8 @@ public class SecurityHeadersFilter extends OncePerRequestFilter {
             "script-src 'self' 'unsafe-inline' 'unsafe-eval'; " +
             "style-src 'self' 'unsafe-inline'; " +
             "img-src 'self' data:; " +
-            "connect-src 'self' ws://localhost:8081 wss://localhost:8081 http://localhost:8080 https://localhost:8080; " +  // 明确指定允许的连接
+            "connect-src 'self' ws://localhost:8081 wss://localhost:8081 http://localhost:8080 https://localhost:8080 " +
+            "wss://nls-gateway-cn-shenzhen.aliyuncs.com https://nls-gateway-cn-shenzhen.aliyuncs.com; " +  // 添加阿里云语音识别服务
             "frame-ancestors 'none'; " +
             "form-action 'self'; " +
             "base-uri 'self'; " +
@@ -45,7 +46,7 @@ public class SecurityHeadersFilter extends OncePerRequestFilter {
         response.setHeader("Expires", "0");
         
         // 添加其他安全头部
-        response.setHeader("Permissions-Policy", "geolocation=(), microphone=(), camera=()");
+        response.setHeader("Permissions-Policy", "geolocation=(), microphone=(self), camera=()");
         response.setHeader("Cross-Origin-Embedder-Policy", "require-corp");
         response.setHeader("Cross-Origin-Opener-Policy", "same-origin");
         response.setHeader("Cross-Origin-Resource-Policy", "same-origin");

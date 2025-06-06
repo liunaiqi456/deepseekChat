@@ -113,12 +113,14 @@ public class WebMvcConfig implements WebMvcConfigurer {
                 
                 // 根据请求来源构建connect-src
                 if (isLocalhost) {
-                    cspBuilder.append("connect-src 'self' ws://localhost:8081 wss://localhost:8081 http://localhost:8080 https://localhost:8080; ");
+                    cspBuilder.append("connect-src 'self' ws://localhost:8081 wss://localhost:8081 http://localhost:8080 https://localhost:8080 ")
+                             .append("wss://nls-gateway-cn-shenzhen.aliyuncs.com https://nls-gateway-cn-shenzhen.aliyuncs.com; ");
                 } else {
-                    // 对于IP访问，允许当前主机的连接
+                    // 对于IP访问，允许当前主机的连接和阿里云语音识别服务
                     cspBuilder.append("connect-src 'self' ws://").append(host).append(":8081 wss://")
                              .append(host).append(":8081 http://").append(host)
-                             .append(":8080 https://").append(host).append(":8080; ");
+                             .append(":8080 https://").append(host).append(":8080 ")
+                             .append("wss://nls-gateway-cn-shenzhen.aliyuncs.com https://nls-gateway-cn-shenzhen.aliyuncs.com; ");
                 }
                 
                 // 添加其他CSP规则
