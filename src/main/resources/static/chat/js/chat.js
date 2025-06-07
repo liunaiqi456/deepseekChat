@@ -2761,15 +2761,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 切换上传菜单显示/隐藏
     function toggleUploadMenu() {
-        console.log('切换上传菜单状态');
+        // 检查上传菜单是否存在
         if (!elements.uploadMenu) {
-            console.error('上传菜单元素不存在，无法切换');
+            console.warn('上传菜单元素不存在');
             return;
         }
         
-        // 使用display属性判断菜单是否可见
-        const isMenuVisible = elements.uploadMenu.style.display !== 'none';
-        console.log('当前菜单是否可见:', isMenuVisible);
+        // 使用getComputedStyle来检查菜单当前是否可见，更可靠
+        const computedStyle = window.getComputedStyle(elements.uploadMenu);
+        const isMenuVisible = computedStyle.display !== 'none';
+        console.log('上传菜单当前显示状态:', isMenuVisible, '计算样式:', computedStyle.display);
         
         if (isMenuVisible) {
             hideUploadMenu();

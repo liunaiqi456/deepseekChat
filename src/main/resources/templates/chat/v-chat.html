@@ -90,7 +90,7 @@
                     second: '2-digit',
                     hour12: false
                 };
-                tokenStatus.textContent = `会话开始时间: ${expireDate.toLocaleString('zh-CN', options)}`;
+                tokenStatus.textContent = `会话失效时间: ${expireDate.toLocaleString('zh-CN', options)}`;
                 tokenStatus.style.color = 'green';
                 logMessage('自动获取Token成功');
             } catch (error) {
