@@ -1998,6 +1998,20 @@ document.addEventListener('DOMContentLoaded', () => {
     // 设置输入状态
     function setInputState(enabled) {
         elements.messageInput.disabled = !enabled;
+        
+        // 添加视觉提示 - 禁用时使用灰色背景
+        if (enabled) {
+            // 启用状态 - 恢复正常背景
+            elements.messageInput.style.backgroundColor = '';
+            elements.messageInput.style.opacity = '';
+            elements.messageInput.placeholder = '输入消息，Shift+Enter换行';
+        } else {
+            // 禁用状态 - 添加灰色背景和提示
+            elements.messageInput.style.backgroundColor = '#f0f0f0';
+            elements.messageInput.style.opacity = '0.7';
+            elements.messageInput.placeholder = '正在加载资源，请稍候...';
+        }
+        
         // 根据输入框状态和内容设置发送按钮状态
         if (enabled) {
             // 只有当输入框有内容时才启用发送按钮
@@ -2584,6 +2598,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 加载外部资源的函数
     async function loadExternalResources() {
+        // 在加载资源前禁用输入框
+        if (elements.messageInput) {
+            elements.messageInput.disabled = true;
+            if (elements.sendButton) {
+                elements.sendButton.disabled = true;
+            }
+            console.log('资源加载中，输入框已禁用');
+        }
+        
         const resources = [
             {
                 type: 'script',
@@ -2747,6 +2770,14 @@ document.addEventListener('DOMContentLoaded', () => {
             console.error('未找到上传菜单或添加按钮元素');
             return;
         }
+
+        // 确保初始状态为隐藏
+        uploadMenu.style.display = 'none';
+        uploadMenu.classList.remove('show');
+        console.log('初始化上传菜单状态为隐藏');
+        
+        // 将上传菜单元素保存到 elements 对象中
+        elements.uploadMenu = uploadMenu;
 
         // 设置菜单显示/隐藏
         addButton.addEventListener('click', toggleUploadMenu);
